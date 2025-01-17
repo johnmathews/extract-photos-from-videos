@@ -25,9 +25,6 @@ def extract_photos_from_video(
     - ssim_threshold: Similarity threshold for determining if frames are identical (default 0.95).
     """
 
-    print(f"{video_file = }")
-    print(f"{output_folder = }")
-
     # Ensure output folder exists
     os.makedirs(output_folder, exist_ok=True)
 
@@ -55,7 +52,7 @@ def extract_photos_from_video(
         current_time = timedelta(seconds=int(current_frame / fps))
         percent_complete = (current_frame / frame_count) * 100
         print(
-            f"\nFound {photo_index} images | Time: {current_time}/{video_duration} | Progress: {percent_complete:.2f}%",
+            f"Found {photo_index} images | Time: {current_time}/{video_duration} | Progress: {percent_complete:.2f}%",
             end="\r",
         )
 
@@ -98,6 +95,6 @@ def extract_photos_from_video(
         cv2.imwrite(photo_path, prev_frame)
 
     cap.release()
-    print(f"\n\nExtracted {photo_index} photos to {output_folder}")
+    print(f"\n✅ Extracted {photo_index} photos to {output_folder}")
 
 
