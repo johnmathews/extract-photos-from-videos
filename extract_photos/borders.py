@@ -3,6 +3,7 @@
 import cv2
 import numpy as np
 
+
 def trim_and_add_border(image, target_border_fraction=0.05):
     """
     Adjusts the border of an image. Identifies the content inside the solid border,
@@ -20,10 +21,6 @@ def trim_and_add_border(image, target_border_fraction=0.05):
 
     # Sample a region of the border to calculate the average border color
     border_sample = image[:50, :50]  # Top-left 10x10 pixel region
-    if len(image.shape) == 2:  # Grayscale image
-        border_color = int(np.mean(border_sample))  # Average intensity
-    else:  # Color image
-        border_color = [int(c) for c in np.mean(border_sample, axis=(0, 1))]  # Average BGR color
 
     # Create a binary mask for the content (where pixel intensity ≠ border_color)
     mask = gray != int(np.mean(border_sample))
@@ -44,14 +41,27 @@ def trim_and_add_border(image, target_border_fraction=0.05):
 
     # Add the new border around the cropped image
     if len(image.shape) == 2:  # Grayscale image
+        border_color = np.mean(border_sample)  # Average intensity
         adjusted_image = cv2.copyMakeBorder(
-            cropped_image, border_h, border_h, border_w, border_w, borderType=cv2.BORDER_CONSTANT, value=border_color
+            cropped_image,
+            border_h,
+            border_h,
+            border_w,
+            border_w,
+            borderType=cv2.BORDER_CONSTANT,
+            value=border_color,
         )
     else:  # Color image
+        border_color = [int(c) for c in np.mean(border_sample, axis=(0, 1))]  # Average BGR color
+        color_bgr: list[int] = [int(c) for c in border_color]
         adjusted_image = cv2.copyMakeBorder(
-            cropped_image, border_h, border_h, border_w, border_w, borderType=cv2.BORDER_CONSTANT, value=border_color
+            cropped_image,
+            border_h,
+            border_h,
+            border_w,
+            border_w,
+            borderType=cv2.BORDER_CONSTANT,
+            value=color_bgr,
         )
 
     return adjusted_image
-
-

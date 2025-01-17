@@ -7,6 +7,9 @@ from datetime import timedelta
 import cv2
 import numpy as np
 
+from extract_photos.borders import trim_and_add_border
+from extract_photos.utils import calculate_ssim, is_valid_photo
+
 
 def extract_photos_from_video(
     video_file="",

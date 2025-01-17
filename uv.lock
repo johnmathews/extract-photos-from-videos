@@ -62,6 +62,15 @@ wheels = [
 ]
 
 [[package]]
+name = "nodeenv"
+version = "1.9.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/16/fc88b08840de0e0a72a2f9d8c6bae36be573e475a6326ae854bcc549fc45/nodeenv-1.9.1.tar.gz", hash = "sha256:6ec12890a2dab7946721edbfbcd91f3319c6ccc9aec47be7c7e6b7011ee6645f", size = 47437 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d2/1d/1b658dbd2b9fa9c4c9f32accbfc0205d532c8c6194dc0f2a4c0428e7128a/nodeenv-1.9.1-py2.py3-none-any.whl", hash = "sha256:ba11c9782d29c27c70ffbdda2d7415098754709be8a7056d79a737cd901155c9", size = 22314 },
+]
+
+[[package]]
 name = "numpy"
 version = "2.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -132,6 +141,7 @@ dependencies = [
     { name = "numpy" },
     { name = "opencv-python" },
     { name = "pyinstaller" },
+    { name = "pyright" },
     { name = "scikit-image" },
 ]
 
@@ -140,6 +150,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.2.1" },
     { name = "opencv-python", specifier = ">=4.11.0.86" },
     { name = "pyinstaller", specifier = ">=6.11.1" },
+    { name = "pyright", specifier = ">=1.1.392.post0" },
     { name = "scikit-image", specifier = ">=0.25.0" },
 ]
 
@@ -209,6 +220,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/92/2e/eb876675aa5338f6ebb2d86dd91cc530542e054e9b6bce1ee938c14fdc07/pyinstaller_hooks_contrib-2025.0.tar.gz", hash = "sha256:6dc0b55a1acaab2ffee36ed4a05b073aa0a22e46f25fb5c66a31e217454135ed", size = 146002 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/23/46/f0654c01d3e16ee652e62dd59c8e80b67842d83d9c103d69d0654507954a/pyinstaller_hooks_contrib-2025.0-py3-none-any.whl", hash = "sha256:3c0623799c3f81a37293127f485d65894c20fd718f722cb588785a3e52581ad1", size = 344671 },
+]
+
+[[package]]
+name = "pyright"
+version = "1.1.392.post0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "nodeenv" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/df/3c6f6b08fba7ccf49b114dfc4bb33e25c299883fd763f93fad47ef8bc58d/pyright-1.1.392.post0.tar.gz", hash = "sha256:3b7f88de74a28dcfa90c7d90c782b6569a48c2be5f9d4add38472bdaac247ebd", size = 3789911 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e7/b1/a18de17f40e4f61ca58856b9ef9b0febf74ff88978c3f7776f910071f567/pyright-1.1.392.post0-py3-none-any.whl", hash = "sha256:252f84458a46fa2f0fd4e2f91fc74f50b9ca52c757062e93f6c250c0d8329eb2", size = 5595487 },
 ]
 
 [[package]]
@@ -288,4 +312,13 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d5/fc/697d8dac6936a81eda88e7d4653d567fcb0d504efad3fd28f5272f96fcf9/tifffile-2025.1.10.tar.gz", hash = "sha256:baaf0a3b87bf7ec375fa1537503353f70497eabe1bdde590f2e41cc0346e612f", size = 365585 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/59/50/7bef6a1259a2c4b81823653a69d2d51074f7b8095db2abae5abee962ab87/tifffile-2025.1.10-py3-none-any.whl", hash = "sha256:ed24cf4c99fb13b4f5fb29f8a0d5605e60558c950bccbdca2a6470732a27cfb3", size = 227551 },
+]
+
+[[package]]
+name = "typing-extensions"
+version = "4.12.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/df/db/f35a00659bc03fec321ba8bce9420de607a1d37f8342eee1863174c69557/typing_extensions-4.12.2.tar.gz", hash = "sha256:1a7ead55c7e559dd4dee8856e3a88b41225abfe1ce8df57b7c13915fe121ffb8", size = 85321 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 },
 ]
