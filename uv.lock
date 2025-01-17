@@ -18,7 +18,7 @@ wheels = [
 [[package]]
 name = "extract-photos"
 version = "0.1.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "numpy" },
     { name = "opencv-python" },
@@ -28,10 +28,10 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "numpy" },
-    { name = "opencv-python" },
+    { name = "numpy", specifier = ">=2.2.1" },
+    { name = "opencv-python", specifier = ">=4.11.0.86" },
     { name = "pyinstaller", specifier = ">=6.11.1" },
-    { name = "scikit-image" },
+    { name = "scikit-image", specifier = ">=0.25.0" },
 ]
 
 [[package]]

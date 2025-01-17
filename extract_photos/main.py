@@ -26,7 +26,7 @@ def main():
     args = parser.parse_args()
 
     # Resolve input directory to an absolute path
-    input_directory = os.path.abspath(args.input_directory)
+    input_directory = args.input_directory
 
     # Create the output directory as a subdirectory of the input directory
     output_directory = os.path.join(input_directory, args.output_subdirectory)
@@ -42,3 +42,6 @@ def main():
         step_time=args.step_time,
         ssim_threshold=args.ssim_threshold,
     )
+
+if __name__=="__main__":
+    main()

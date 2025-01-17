@@ -1,0 +1,43 @@
+[project]
+name = "extract-photos"
+version = "0.1.0"
+description = "A Python package to identify photos in videos and extract them."
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [{name = "John Mathews", email = "mthwsjc@gmail.com"}]
+keywords = ["video", "image", "photo", "opencv"]
+requires-python = ">=3.13"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "opencv-python",
+    "numpy",
+    "scikit-image",
+    "pyinstaller>=6.11.1",
+]
+
+[project.scripts]
+photo-extractor = "photo_extractor.main:main"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+line-length = 120
+max-line-length = 120
+
+[tool.flake8]
+max-line-length = 120
+ignore = ["E203"]  # Ignore 'whitespace before ":"'
+
+[tool.black]
+line-length = 120
