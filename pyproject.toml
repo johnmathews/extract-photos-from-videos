@@ -1,16 +1,37 @@
 [project]
-name = "photo-extract"
+name = "extract-photos"
 version = "0.1.0"
-description = "Add your description here"
+description = "A Python package to identify photos in videos and extract them."
 readme = "README.md"
+license = {file = "LICENSE"}
+authors = [{name = "John Mathews", email = "mthwsjc@gmail.com"}]
+homepage = "https://github.com/johnmathews/photo-extractor"
+repository = "https://github.com/johnmathews/photo-extractor"
+keywords = ["video", "image", "photo", "opencv"]
 requires-python = ">=3.13"
-dependencies = [
-    "numpy>=2.2.1",
-    "opencv-python>=4.11.0.86",
-    "pyinstaller>=6.11.1",
-    "pyright>=1.1.392.post0",
-    "scikit-image>=0.25.0",
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
 ]
+
+dependencies = [
+    "opencv-python",
+    "numpy",
+    "scikit-image"
+]
+
+[project.scripts]
+photo-extractor = "photo_extractor.main:main"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
 
 [tool.pyright]
 venvPath = "."
