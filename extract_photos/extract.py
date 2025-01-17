@@ -1,60 +1,32 @@
 #!/usr/bin/env python3
 
 import os
-from datetime import timedelta
+from multiprocessing import Manager, Pool
+from time import sleep
 
 import cv2
 import numpy as np
-
 from borders import trim_and_add_border
-from utils import calculate_ssim, is_valid_photo
+from utils import calculate_ssim, is_valid_photo, display_progress
+from datetime import timedelta
 
-def extract_photos_from_video(
-    video_file="",
-    output_folder="/Users/john/Desktop/videos/extracted_photos",
-    step_time=1,
-    ssim_threshold=0.98,
-):
-    """
-    Extracts photos with borders from a video and saves them as JPEGs.
 
-    Parameters:
-    - video_path: Path to the input video file.
-    - output_folder: Path to save the extracted photographs.
-    - step_time: Interval of time in seconds to skip when analyzing video (default=1).
-    - ssim_threshold: Similarity threshold for determining if frames are identical (default 0.95).
-    """
-
-    # Ensure output folder exists
-    os.makedirs(output_folder, exist_ok=True)
-
-    # Load video
+def process_chunk(video_file, output_folder, start_frame, end_frame, frame_step, fps, ssim_threshold, chunk_id, progress_dict):
     cap = cv2.VideoCapture(video_file)
-    fps = int(cap.get(cv2.CAP_PROP_FPS))  # Frames per second
-    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    video_duration = timedelta(seconds=int(frame_count / fps))  # Total video duration
-
-    frame_step = fps * step_time
-
-    # Variables for processing
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
     prev_frame = None
     photo_index = 0
-    current_frame = 0
+    total_frames = end_frame - start_frame
+    total_time = timedelta(seconds=int(total_frames / fps))
 
-    while current_frame < frame_count:
-        # Set the position to the current frame
-        cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
+    while True:
+        current_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+        if current_frame >= end_frame:
+            break
+
         ret, frame = cap.read()
         if not ret:  # End of video
             break
-
-        # Update progress tracker
-        current_time = timedelta(seconds=int(current_frame / fps))
-        percent_complete = (current_frame / frame_count) * 100
-        print(
-            f"Found {photo_index} images | Time: {current_time}/{video_duration} | Progress: {percent_complete:.2f}%",
-            end="\r",
-        )
 
         # Check for white borders
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -72,29 +44,82 @@ def extract_photos_from_video(
 
         if is_solid_color:
             if prev_frame is not None:
-                # Compute SSIM between the current frame and the previous saved frame
                 similarity = calculate_ssim(frame, prev_frame)
-
                 if similarity < ssim_threshold:
                     # Save the previous frame as a photo
                     trimmed_frame = trim_and_add_border(prev_frame)
                     if is_valid_photo(trimmed_frame):
-                        photo_path = os.path.join(output_folder, f"photo_{photo_index:03d}.jpg")
+                        photo_path = os.path.join(
+                            output_folder, f"photo_chunk{chunk_id}_{photo_index:03d}.jpg"
+                        )
                         cv2.imwrite(photo_path, trimmed_frame)
                         photo_index += 1
 
-            # Update the previous frame
-            prev_frame = frame
+        prev_frame = frame
+        cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + frame_step)
 
-        # Move to the next subset frame
-        current_frame += frame_step
-
-    # Save the last frame if not already saved
-    if prev_frame is not None:
-        photo_path = os.path.join(output_folder, f"photo_{photo_index:03d}.jpg")
-        cv2.imwrite(photo_path, prev_frame)
+        # Update progress with a dictionary
+        elapsed_time = timedelta(seconds=int((current_frame - start_frame) / fps))
+        progress = (current_frame - start_frame) / total_frames * 100
+        progress_dict[chunk_id] = {
+            "progress": f"{progress:.2f}%",
+            "time": f"{elapsed_time}/{total_time}",
+            "frames": f"{current_frame}/{total_frames}",
+            "photos": photo_index,
+        }
 
     cap.release()
-    print(f"\n✅ Extracted {photo_index} photos to {output_folder}")
+    return photo_index
 
 
+def extract_photos_from_video_parallel(
+    video_file,
+    output_folder="/Users/john/Desktop/videos/extracted_photos",
+    step_time=1,
+    ssim_threshold=0.98,
+):
+    os.makedirs(output_folder, exist_ok=True)
+
+    # Load video
+    cap = cv2.VideoCapture(video_file)
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_step = fps * step_time
+    total_time = timedelta(seconds=int(frame_count / fps))
+    cap.release()
+
+    # Determine the number of chunks
+    num_cores = os.cpu_count() or 1
+    num_chunks = max(1, num_cores // 4)
+    chunk_size = frame_count // num_chunks
+    chunks = [(i * chunk_size, (i + 1) * chunk_size) for i in range(num_chunks)]
+    chunks[-1] = (chunks[-1][0], frame_count)  # Ensure the last chunk includes all remaining frames
+
+    # Shared progress dictionary
+    with Manager() as manager:
+        progress_dict = manager.dict({
+            i: {"progress": "0.00%", "time": "0:00:00/0:00:00", "frames": "0/0", "photos": 0}
+            for i in range(num_chunks)
+        })
+
+        # Prepare arguments for multiprocessing
+        args = [
+            (video_file, output_folder, start, end, frame_step, fps, ssim_threshold, i, progress_dict)
+            for i, (start, end) in enumerate(chunks)
+        ]
+
+        # Start multiprocessing
+        with Pool(num_chunks) as pool:
+            # Launch a background thread to display progress
+            from threading import Thread
+            progress_thread = Thread(target=display_progress, args=(progress_dict, num_chunks))
+            progress_thread.start()
+
+            # Run the chunk processing
+            results = pool.starmap(process_chunk, args)
+
+            # Wait for progress display to finish
+            progress_thread.join()
+
+    total_photos = sum(results)
+    print(f"\n✅ Extracted {total_photos} photos to {output_folder}")

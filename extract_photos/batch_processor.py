@@ -1,6 +1,7 @@
 import os
+from datetime import datetime
 
-from extract import extract_photos_from_video
+from extract import extract_photos_from_video_parallel
 from utils import make_safe_folder_name
 
 
@@ -26,7 +27,11 @@ def process_videos_in_directory(input_directory: str, output_directory: str, **k
         if filename.lower().endswith(video_file_extensions):
             video_files.append(filename)
 
-    print(f"⭐ Found {len(video_files)} videos...")
+    if not video_files:
+       print(f"🛑 Found 0 video files. Stopping.")
+       return 
+
+    print(f"Found {len(video_files)} videos...")
 
     # Iterate over all files in the input directory
     for filename in video_files:
@@ -38,9 +43,13 @@ def process_videos_in_directory(input_directory: str, output_directory: str, **k
 
         input_path = os.path.join(input_directory, filename) 
 
-        print(f"\n ⏳ Processing video: {filename}")
+        print(f"\n{datetime.now().strftime('%H:%m:%S')} ⏳ Processing video: {filename}")
 
         # Extract photos from the video
-        extract_photos_from_video(video_file=input_path, output_folder=video_output_directory, **kwargs)
+        extract_photos_from_video_parallel(
+            video_file=input_path,
+            output_folder=video_output_directory,
+            **kwargs 
+        ) 
 
-    print(f"✨ Finished processing videos in directory: {input_directory} ✨")
+    print(f"{datetime.now().strftime('%H:%m:%S')} ✨ Finished processing videos in directory: {input_directory} ✨")
