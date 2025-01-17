@@ -17,16 +17,19 @@ def process_videos_in_directory(input_directory: str, output_directory: str, **k
     # Ensure the output directory exists
     os.makedirs(output_directory, exist_ok=True)
 
-    video_file_extensions = (".mp4", ".mkv", ".avi", ".mov", ".webm")
+    video_files = []
 
+    video_file_extensions = (".mp4", ".mkv", ".avi", ".mov", ".webm")
     # Iterate over all files in the input directory
     for filename in os.listdir(input_directory):
-        input_path = os.path.join(input_directory, filename)
+        file_path = os.path.join(input_directory, filename)
 
         # Skip if it's not a file or doesn't have a video file extension
-        if not os.path.isfile(input_path) or not filename.lower().endswith(video_file_extensions):
-            continue
+        if filename.lower().endswith(video_file_extensions):
+            video_files.append(filename)
 
+    # Iterate over all files in the input directory
+    for filename in video_files:
         # Create a subdirectory named after the video
         video_name = os.path.splitext(filename)[0]
         subfolder = make_safe_folder_name(video_name)

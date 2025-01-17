@@ -3,7 +3,7 @@
 import argparse
 import os
 
-from extract_photos.batch_processor import process_videos_in_directory
+from batch_processor import process_videos_in_directory
 
 
 def main():
