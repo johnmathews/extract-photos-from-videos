@@ -7,8 +7,8 @@ from datetime import timedelta
 import cv2
 import numpy as np
 
-from extract_photos.borders import trim_and_add_border
-from extract_photos.utils import calculate_ssim, is_valid_photo
+from borders import trim_and_add_border
+from utils import calculate_ssim, is_valid_photo
 
 
 def extract_photos_from_video(
@@ -61,7 +61,7 @@ def extract_photos_from_video(
         current_time = timedelta(seconds=int(current_frame / fps))
         percent_complete = (current_frame / frame_count) * 100
         print(
-            f"Found {photo_index} images | Time: {current_time}/{video_duration} | Progress: {percent_complete:.2f}%",
+            f"\nFound {photo_index} images | Time: {current_time}/{video_duration} | Progress: {percent_complete:.2f}%",
             end="\r",
         )
 
@@ -83,7 +83,6 @@ def extract_photos_from_video(
             if prev_frame is not None:
                 # Compute SSIM between the current frame and the previous saved frame
                 similarity = calculate_ssim(frame, prev_frame)
-                # print(f"{similarity = }")
 
                 if similarity < ssim_threshold:
                     # Save the previous frame as a photo
@@ -105,7 +104,7 @@ def extract_photos_from_video(
         cv2.imwrite(photo_path, prev_frame)
 
     cap.release()
-    print(f"\nExtracted {photo_index} photos to {output_folder}")
+    print(f"\n\nExtracted {photo_index} photos to {output_folder}")
 
 
 if __name__ == "__main__":
