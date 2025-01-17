@@ -1,6 +1,8 @@
 import os
-from main import extract_photos_from_video
+
+from extract import extract_photos_from_video
 from utils import make_safe_folder_name
+
 
 def process_videos_in_directory(input_directory: str, output_directory: str, **kwargs):
     """
@@ -15,7 +17,7 @@ def process_videos_in_directory(input_directory: str, output_directory: str, **k
     # Ensure the output directory exists
     os.makedirs(output_directory, exist_ok=True)
 
-    video_file_extensions = ('.mp4', '.mkv', '.avi', '.mov', '.webm')
+    video_file_extensions = (".mp4", ".mkv", ".avi", ".mov", ".webm")
 
     # Iterate over all files in the input directory
     for filename in os.listdir(input_directory):
@@ -32,12 +34,8 @@ def process_videos_in_directory(input_directory: str, output_directory: str, **k
         os.makedirs(video_output_directory, exist_ok=True)
 
         print(f"Processing video: {filename}")
-        
+
         # Extract photos from the video
-        extract_photos_from_video(
-            video_file=input_path,
-            output_folder=video_output_directory,
-            **kwargs
-        )
+        extract_photos_from_video(video_file=input_path, output_folder=video_output_directory, **kwargs)
 
     print(f"Finished processing videos in directory: {input_directory}")
