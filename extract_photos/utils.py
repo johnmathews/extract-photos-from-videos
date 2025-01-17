@@ -1,8 +1,37 @@
 #!/usr/bin/env python3
 
+import re
+
 import cv2
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
+
+
+def make_safe_folder_name(title: str) -> str:
+    """
+    Converts a video title into a safe folder name by:
+    - Replacing whitespace with hyphens.
+    - Removing punctuation and special characters.
+    - Converting to lowercase.
+
+    Parameters:
+    - title: The original video title.
+
+    Returns:
+    - A safe folder name string.
+    """
+
+    # Replace whitespace with hyphens
+    title = re.sub(r'\s+', '-', title.strip())
+
+    # Remove punctuation and special characters
+    title = re.sub(r'[^\w\-]', '', title)
+
+    # Convert to lowercase
+    title = title.lower()
+
+    return title
+
 
 def calculate_ssim(frame1, frame2):
     """
@@ -45,5 +74,3 @@ def is_valid_photo(image):
             return False
 
     return True
-
-

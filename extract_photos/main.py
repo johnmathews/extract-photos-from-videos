@@ -10,11 +10,11 @@ import numpy as np
 from borders import trim_and_add_border
 from utils import calculate_ssim, is_valid_photo
 
+from extract_photos.batch_processor import process_videos_in_directory
 
 def extract_photos_from_video(
     video_file="",
     output_folder="/Users/john/Desktop/videos/extracted_photos",
-    input_folder="/Users/john/Desktop/videos",
     step_time=1,
     ssim_threshold=0.98,
 ):
@@ -30,15 +30,12 @@ def extract_photos_from_video(
 
     print(f"{video_file = }")
     print(f"{output_folder = }")
-    print(f"{input_folder = }")
 
     # Ensure output folder exists
     os.makedirs(output_folder, exist_ok=True)
 
-    video_file_path = input_folder + video_file
-    print(f"{video_file_path = }")
     # Load video
-    cap = cv2.VideoCapture(video_file_path)
+    cap = cv2.VideoCapture(video_file)
     fps = int(cap.get(cv2.CAP_PROP_FPS))  # Frames per second
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     video_duration = timedelta(seconds=int(frame_count / fps))  # Total video duration
@@ -107,37 +104,41 @@ def extract_photos_from_video(
     print(f"\n\nExtracted {photo_index} photos to {output_folder}")
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Extract photos with borders from a video.")
-    parser.add_argument("video_file", help="Path to the video file.")
+def main():
+    parser = argparse.ArgumentParser(description="Extract photos with borders from videos in a directory.")
     parser.add_argument(
-        "-i",
-        "--input_folder",
-        default="/Users/john/Desktop/videos/",
-        help="Folder to find videos in (default: /Users/john/Desktop/videos/).",
+        "input_directory",
+        help="Path to the directory containing videos (can be relative or absolute).",
     )
     parser.add_argument(
         "-o",
-        "--output_folder",
-        default="/Users/john/Desktop/videos/extracted_photos",
-        help="Folder to save extracted photos (default: /Users/john/Desktop/videos/extracted_photos).",
+        "--output_subdirectory",
+        default="extracted_photos",
+        help="Name of the subdirectory to store extracted photos (default: 'extracted_photos').",
     )
     parser.add_argument(
-        "-s",
-        "--step_time",
-        type=float,
-        default=1.0,
-        help="Time interval (in seconds) to skip between frames (default: 1.0).",
+        "-s", "--step_time", type=float, default=1.0, help="Time interval (in seconds) to skip between frames."
     )
     parser.add_argument(
-        "-t", "--ssim_threshold", type=float, default=0.98, help="Threshold for SSIM similarity (default: 0.98)."
+        "-t", "--ssim_threshold", type=float, default=0.98, help="Threshold for SSIM similarity."
     )
+
     args = parser.parse_args()
 
-    extract_photos_from_video(
-        video_file=args.video_file,
-        input_folder=args.input_folder,
-        output_folder=args.output_folder,
+    # Resolve input directory to an absolute path
+    input_directory = os.path.abspath(args.input_directory)
+
+    # Create the output directory as a subdirectory of the input directory
+    output_directory = os.path.join(input_directory, args.output_subdirectory)
+    os.makedirs(output_directory, exist_ok=True)
+
+    print(f"Processing videos in: {input_directory}")
+    print(f"Output photos will be saved in: {output_directory}")
+
+    # Process the videos in the input directory
+    process_videos_in_directory(
+        input_directory=input_directory,
+        output_directory=output_directory,
         step_time=args.step_time,
         ssim_threshold=args.ssim_threshold,
     )

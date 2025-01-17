@@ -30,9 +30,6 @@ photo-extractor = "photo_extractor.main:main"
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
-
-[project]
-
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
