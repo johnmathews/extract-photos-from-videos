@@ -55,6 +55,7 @@ def process_videos_in_directory(
             output_folder=video_output_directory,
             step_time=step_time,
             ssim_threshold=ssim_threshold,
+            filename=filename 
         )
 
     print(f"{datetime.now().strftime('%H:%M:%S')} ✨ Finished processing {len(video_files)} videos ✨")

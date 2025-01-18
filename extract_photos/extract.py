@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 from borders import trim_and_add_border
 from display_progress import display_progress
-from utils import calculate_ssim, is_valid_photo, setup_logger
+from utils import calculate_ssim, is_valid_photo, make_safe_folder_name, setup_logger
 
 
 def is_frame_static(video_capture, current_frame, frame_offset, ssim_threshold):
@@ -90,9 +90,19 @@ def detect_almost_uniform_borders(frame, border_width=5, threshold=10):
 
 
 def process_chunk(
-    video_file, output_folder, start_frame, end_frame, frame_step, fps, ssim_threshold, chunk_id, progress_dict
+    video_file,
+    output_folder: str,
+    start_frame: int,
+    end_frame: int,
+    frame_step: float,
+    fps: int,
+    ssim_threshold: float,
+    chunk_id: int,
+    progress_dict: dict,
+    filename: str,
 ):
 
+    filename_safe = make_safe_folder_name(os.path.splitext(filename)[0])
     log_dir = os.path.join(output_folder, "logs")
     os.makedirs(log_dir, exist_ok=True)
 
@@ -101,13 +111,16 @@ def process_chunk(
     end_minutes, end_seconds = divmod(end_frame / fps, 60)
     end_time = f"{int(end_minutes)}:{int(end_seconds):02d}"
 
-    log_file = os.path.join(log_dir, f"chunk_{chunk_id}__{start_time}_to_{end_time}.log")
+    log_file = os.path.join(
+        log_dir, f"{filename_safe}__chunk_{chunk_id}__{start_time.replace(':','m')}s_to_{end_time.replace(':','m')}s.log"
+    )
     logger = setup_logger(log_file)
 
+    logger.info(f"File: {filename_safe}")
     logger.info(f"Starting chunk {chunk_id}")
     logger.info(f"Chunk time: {start_time} - {end_time}")
-    logger.info(f"{fps = } {frame_step = } step_time = {frame_step / fps}s")
-    logger.info(f"{ssim_threshold = }")
+    logger.info(f"fps: {fps}, frame_step: {frame_step}, step_time: {frame_step / fps}s")
+    logger.info(f"ssim_threshold: {ssim_threshold}")
 
     cap = cv2.VideoCapture(video_file)
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
@@ -147,7 +160,7 @@ def process_chunk(
                     if is_valid_photo(trimmed_frame):
                         is_photo = is_frame_static(cap, frame, frame_offset=5, ssim_threshold=ssim_threshold)
                         if is_photo:
-                            file_name = f"photo_chunk{chunk_id}_{current_time}.jpg"
+                            file_name = f"{filename_safe}_{current_time}.jpg"
                             photo_path = os.path.join(output_folder, file_name)
                             cv2.imwrite(photo_path, trimmed_frame)
                             photo_index += 1
@@ -187,9 +200,10 @@ def process_chunk(
 
 def extract_photos_from_video_parallel(
     video_file,
-    output_folder,
-    step_time,
-    ssim_threshold,
+    output_folder: str,
+    step_time: float,
+    ssim_threshold: float,
+    filename: int,
 ):
     """
     checks frames of a video to see if the frame contains a photograph.
@@ -237,7 +251,7 @@ def extract_photos_from_video_parallel(
 
         # Prepare arguments for multiprocessing
         args = [
-            (video_file, output_folder, start, end, frame_step, fps, ssim_threshold, i, progress_dict)
+            (video_file, output_folder, start, end, frame_step, fps, ssim_threshold, i, progress_dict, filename)
             for i, (start, end) in enumerate(chunks)
         ]
 
