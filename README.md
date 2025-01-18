@@ -46,12 +46,12 @@ automates the process, making it much easier! 🚀
 
 ---
 
-## 🛠️ Dependencies
+## 🛠️  Dependencies
 
-This project uses [`uv`](https://github.com/universalvirtualenv) for managing
+This project uses [`uv`](https://github.com/astral-sh/uv) for managing
 dependencies and virtual environments.
 
-### 🏃‍♂️ Run the Tool Anywhere!
+### 🏃 Run the Tool Anywhere!
 
 To run the script from anywhere without manually activating the virtual
 environment, add the following function to your `~/.zshrc` or `~/.bashrc`:
