@@ -1,33 +1,62 @@
-# Photograph Extractor
+# 📸 Photograph Extractor
 
-This script parses video files and extracts photographs from them, saving the
-photographs as JPEGS images.
+## ✨ What
 
-It is designed to take as input a directory containing numerous video files to
-check. It identifies video files in the directory and then analyses each video
-in turn.
+This script analyzes video files and extracts **photographs** with solid-color
+borders, saving them as **JPEG images**. 📂
 
-A subdirectory is created for each video, using the name of the video as the
-name of the subdirectory. Photographs from a video are then saved into that
-video's subdirectory.
+---
 
-To save time, not every frame is analysed. One frame is analysed per second of
-video.
+## 🧐 Why
 
-Photographs are identified by having a solid color border around them, usually
-white. Full frame photographs without a border will not be extracted. As long as
-the border is a constant color, this tool should work.
+I enjoy studying photography and often find YouTube to be a treasure trove of
+inspiring photographs. However, I wanted a way to:
 
-If the same photograph is displayed for more than 1 second, the tool will avoid
-extracting the same photographs more than once by measuring the similarity of a
-candidate photo to the previously extracted photo. The similarity threshold is
-0.98 but can be changed.
+- **Slow down and view photos** in any order.
+- **Annotate photos** with notes about why they work or are interesting.
 
-The project uses `uv` to manage dependencies and virtual environments. In order
-to use the tool from anywhere without remembering commands to activate and
-deactivate a virtualenv, the following snippet is put into my `.zshrc` file:
+Initially, I took screenshots manually, but that was tedious. This tool
+automates the process, making it much easier! 🚀
 
-```
+---
+
+## ⚙️ How It Works
+
+1. **Input**:
+   - Provide a directory containing multiple video files. 🎥
+2. **Processing**:
+   - The script identifies video files in the directory and processes them one
+     by one.
+3. **Output**:
+   - Creates a subdirectory for each video (named after the video file).
+   - Saves extracted photos into the corresponding subdirectory. 🖼️
+
+### 🔍 Key Details
+
+- **Frame Selection**:
+  - The tool analyzes one frame per second to save time.
+- **Photo Detection**:
+  - Detects photographs with a solid-color border (e.g., white). Full-frame
+    photos without borders are not extracted.
+- **Duplicate Avoidance**:
+  - Skips duplicate photos if the same image is displayed for more than 1
+    second.
+  - Uses **Structural Similarity Index (SSIM)** with a default threshold of
+    `0.98` (configurable).
+
+---
+
+## 🛠️ Dependencies
+
+This project uses [`uv`](https://github.com/universalvirtualenv) for managing
+dependencies and virtual environments.
+
+### 🏃‍♂️ Run the Tool Anywhere!
+
+To run the script from anywhere without manually activating the virtual
+environment, add the following function to your `~/.zshrc` or `~/.bashrc`:
+
+```bash
 extract_photos() {
     (source <path-to-repo>/.venv/bin/activate && uv run python <path-to-repo>/extract_photos/main.py "$@")
 }
