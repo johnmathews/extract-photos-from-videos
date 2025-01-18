@@ -51,7 +51,6 @@ def process_videos_in_directory(input_directory: str, output_directory: str, **k
         extract_photos_from_video_parallel(
             video_file=input_path,
             output_folder=video_output_directory,
-            **kwargs 
         ) 
 
     print(f"{datetime.now().strftime('%H:%M:%S')} ✨ Finished processing {len(video_files)} videos ✨")
