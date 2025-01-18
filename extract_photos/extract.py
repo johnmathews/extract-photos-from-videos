@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 
 import os
+from datetime import timedelta
 from multiprocessing import Manager, Pool
 
 import cv2
 import numpy as np
 from borders import trim_and_add_border
-from utils import calculate_ssim, is_valid_photo, display_progress
-from datetime import timedelta
+from utils import calculate_ssim, display_progress, is_valid_photo
 
 
-def process_chunk(video_file, output_folder, start_frame, end_frame, frame_step, fps, ssim_threshold, chunk_id, progress_dict):
+def process_chunk(
+    video_file, output_folder, start_frame, end_frame, frame_step, fps, ssim_threshold, chunk_id, progress_dict
+):
     cap = cv2.VideoCapture(video_file)
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
     prev_frame = None
@@ -47,9 +49,7 @@ def process_chunk(video_file, output_folder, start_frame, end_frame, frame_step,
                 if similarity < ssim_threshold:
                     trimmed_frame = trim_and_add_border(prev_frame)
                     if is_valid_photo(trimmed_frame):
-                        photo_path = os.path.join(
-                            output_folder, f"photo_chunk{chunk_id}_{photo_index:03d}.jpg"
-                        )
+                        photo_path = os.path.join(output_folder, f"photo_chunk{chunk_id}_{photo_index:03d}.jpg")
                         cv2.imwrite(photo_path, trimmed_frame)
                         photo_index += 1
 
@@ -91,7 +91,6 @@ def extract_photos_from_video_parallel(
     fps = int(cap.get(cv2.CAP_PROP_FPS))
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     frame_step = fps * step_time
-    total_time = timedelta(seconds=int(frame_count / fps))
     cap.release()
 
     # Determine the number of chunks
@@ -103,10 +102,12 @@ def extract_photos_from_video_parallel(
 
     # Shared progress dictionary
     with Manager() as manager:
-        progress_dict = manager.dict({
-            i: {"progress": "0.00%", "time": "0:00:00/0:00:00", "frames": "0/0", "photos": 0}
-            for i in range(num_chunks)
-        })
+        progress_dict = manager.dict(
+            {
+                i: {"progress": "0.00%", "time": "0:00:00/0:00:00", "frames": "0/0", "photos": 0}
+                for i in range(num_chunks)
+            }
+        )
 
         # Prepare arguments for multiprocessing
         args = [
@@ -118,6 +119,7 @@ def extract_photos_from_video_parallel(
         with Pool(num_chunks) as pool:
             # Launch a background thread to display progress
             from threading import Thread
+
             progress_thread = Thread(target=display_progress, args=(progress_dict, num_chunks))
             progress_thread.start()
 
