@@ -20,7 +20,7 @@ def trim_and_add_border(image, target_border_fraction=0.05):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
 
     # Sample a region of the border to calculate the average border color
-    border_sample = image[:50, :50]  # Top-left 10x10 pixel region
+    border_sample = image[:20, :20]  # Top-left 20x20 pixel region
 
     # Create a binary mask for the content (where pixel intensity ≠ border_color)
     mask = gray != int(np.mean(border_sample))
