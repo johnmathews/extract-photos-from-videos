@@ -10,21 +10,20 @@ from borders import trim_and_add_border
 from display_progress import display_progress
 from utils import calculate_ssim, is_valid_photo, setup_logger
 
-
-def detect_uniform_borders(frame, border_width=10):
+def detect_almost_uniform_borders(frame, border_width=5, threshold=10):
     """
-    Checks if a frame has exact uniform borders.
+    Checks if a frame has almost uniform borders.
 
     Parameters:
-        frame (np.array): The input video frame.
+        frame (np.array): The input video frame (grayscale or color).
         border_width (int): The width of the borders to check.
+        threshold (float): Maximum allowed standard deviation for uniformity.
 
     Returns:
-        bool: True if all borders are exactly uniform, False otherwise.
+        bool: True if all borders are almost uniform, False otherwise.
     """
-    # Convert frame to grayscale for easier processing
-    # gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    gray_frame = frame
+    # Convert frame to grayscale if it is not already
+    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if len(frame.shape) == 3 else frame
 
     # Extract border regions
     left_border = gray_frame[:, :border_width]
@@ -32,14 +31,21 @@ def detect_uniform_borders(frame, border_width=10):
     top_border = gray_frame[:border_width, :]
     bottom_border = gray_frame[-border_width:, :]
 
-    # Check uniformity for each border
-    is_left_uniform = np.all(left_border == left_border[0, 0])
-    is_right_uniform = np.all(right_border == right_border[0, 0])
-    is_top_uniform = np.all(top_border == top_border[0, 0])
-    is_bottom_uniform = np.all(bottom_border == bottom_border[0, 0])
+    # Calculate the standard deviation for each border
+    left_std = np.std(left_border)
+    right_std = np.std(right_border)
+    top_std = np.std(top_border)
+    bottom_std = np.std(bottom_border)
 
-    # A valid frame must have all borders uniform
+    # Check if the standard deviation for all borders is below the threshold
+    is_left_uniform = left_std <= threshold
+    is_right_uniform = right_std <= threshold
+    is_top_uniform = top_std <= threshold
+    is_bottom_uniform = bottom_std <= threshold
+
+    # A valid frame must have all borders almost uniform
     return is_left_uniform and is_right_uniform and is_top_uniform and is_bottom_uniform
+
 
 def process_chunk(
     video_file, output_folder, start_frame, end_frame, frame_step, fps, ssim_threshold, chunk_id, progress_dict
@@ -86,7 +92,7 @@ def process_chunk(
             break
 
         # Check for white borders
-        is_solid_color = detect_uniform_borders(frame)
+        is_solid_color = detect_almost_uniform_borders(frame)
 
         # to avoid extracting the same photograph more than once,
         # check that this frame is not the same as the previous frame
@@ -141,7 +147,7 @@ def extract_photos_from_video_parallel(
     video_file,
     output_folder="/Users/john/Desktop/videos/extracted_photos",
     step_time=1,
-    ssim_threshold=0.98,
+    ssim_threshold=0.95,
 ):
     """
     checks frames of a video to see if the frame contains a photograph.
