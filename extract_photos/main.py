@@ -19,9 +19,9 @@ def main():
         help="Name of the subdirectory to store extracted photos (default: 'extracted_photos').",
     )
     parser.add_argument(
-        "-s", "--step_time", type=float, default=1.0, help="Time interval (in seconds) to skip between frames."
+        "-s", "--step_time", type=float, default=0.5, help="Time interval (in seconds) to skip between frames."
     )
-    parser.add_argument("-t", "--ssim_threshold", type=float, default=0.95, help="Threshold for SSIM similarity.")
+    parser.add_argument("-t", "--ssim_threshold", type=float, default=0.90, help="Threshold for SSIM similarity.")
 
     args = parser.parse_args()
 
@@ -35,10 +35,10 @@ def main():
     print(f"\nProcessing videos in: {input_directory}")
     print(f"Output photos will be saved in: {output_directory}")
 
-    print(f"step_time: {args.step_time}s") 
-    print(f"similarity threshold: {args.ssim_threshold}") 
- 
-    print() 
+    print(f"step_time: {args.step_time}s")
+    print(f"similarity threshold: {args.ssim_threshold}")
+
+    print()
 
     # Process the videos in the input directory
     process_videos_in_directory(
@@ -48,5 +48,6 @@ def main():
         ssim_threshold=args.ssim_threshold,
     )
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main()

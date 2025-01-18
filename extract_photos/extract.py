@@ -11,7 +11,7 @@ from display_progress import display_progress
 from utils import calculate_ssim, is_valid_photo, setup_logger
 
 
-def is_frame_static(video_capture, current_frame, frame_offset=5, ssim_threshold=0.98):
+def is_frame_static(video_capture, current_frame, frame_offset, ssim_threshold):
     """
     Determines if the current frame is part of a still photo or a video segment.
 
@@ -50,6 +50,7 @@ def is_frame_static(video_capture, current_frame, frame_offset=5, ssim_threshold
 
     # Determine if the frames are identical
     return similarity >= ssim_threshold
+
 
 def detect_almost_uniform_borders(frame, border_width=5, threshold=10):
     """
@@ -96,15 +97,16 @@ def process_chunk(
     os.makedirs(log_dir, exist_ok=True)
 
     start_minutes, start_seconds = divmod(start_frame / fps, 60)
-    start_time = f"{int(start_minutes)}-{int(start_seconds):02d}"
+    start_time = f"{int(start_minutes)}:{int(start_seconds):02d}"
     end_minutes, end_seconds = divmod(end_frame / fps, 60)
-    end_time = f"{int(end_minutes)}-{int(end_seconds):02d}"
+    end_time = f"{int(end_minutes)}:{int(end_seconds):02d}"
 
     log_file = os.path.join(log_dir, f"chunk_{chunk_id}__{start_time}_to_{end_time}.log")
     logger = setup_logger(log_file)
 
-    logger.info(f"Starting chunk {chunk_id}: {start_time}__{end_time}")
-    logger.info(f"{fps = } {frame_step = }")
+    logger.info(f"Starting chunk {chunk_id}")
+    logger.info(f"Chunk time: {start_time} - {end_time}")
+    logger.info(f"{fps = } {frame_step = } step_time = {frame_step / fps}s")
     logger.info(f"{ssim_threshold = }")
 
     cap = cv2.VideoCapture(video_file)
@@ -116,8 +118,8 @@ def process_chunk(
     total_time = timedelta(seconds=int(total_frames / fps))
 
     start_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
-    start_time_minutes, start_time_seconds = divmod(start_frame / fps, 60)
-    start_time = f"{int(start_time_minutes)}-{int(start_time_seconds):02d}"
+    # start_time_minutes, start_time_seconds = divmod(start_frame / fps, 60)
+    # start_time = f"{int(start_time_minutes)}-{int(start_time_seconds):02d}"
     logger.info(f"Analysing from {start_time}")
 
     while True:
@@ -144,8 +146,7 @@ def process_chunk(
                     trimmed_frame = trim_and_add_border(frame)
                     if is_valid_photo(trimmed_frame):
                         is_photo = is_frame_static(cap, frame, frame_offset=5, ssim_threshold=ssim_threshold)
-                        if is_photo: 
-                            # file_name = f"photo_chunk{chunk_id}_{photo_index:03d}.jpg"
+                        if is_photo:
                             file_name = f"photo_chunk{chunk_id}_{current_time}.jpg"
                             photo_path = os.path.join(output_folder, file_name)
                             cv2.imwrite(photo_path, trimmed_frame)
@@ -186,9 +187,9 @@ def process_chunk(
 
 def extract_photos_from_video_parallel(
     video_file,
-    output_folder="/Users/john/Desktop/videos/extracted_photos",
-    step_time=1,
-    ssim_threshold=0.90,
+    output_folder,
+    step_time,
+    ssim_threshold,
 ):
     """
     checks frames of a video to see if the frame contains a photograph.
@@ -198,7 +199,7 @@ def extract_photos_from_video_parallel(
     extracted_photos: will contain a subdirectory for each video. each subdirectory contains the photographs extracted from
         the video.
     step_time: amount of time in seconds between each step.
-    ssim_threshold: if a frame has a similarity highter than ssim_threshold it will be considered the same as the previous
+    ssim_threshold: if a frame has a similarity higher than ssim_threshold it will be considered the same as the previous
         frame and will not be extracted again.
     """
     os.makedirs(output_folder, exist_ok=True)
@@ -207,7 +208,7 @@ def extract_photos_from_video_parallel(
     cap = cv2.VideoCapture(video_file)
     fps = int(cap.get(cv2.CAP_PROP_FPS))
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    frame_step = fps * step_time # number of frames to jump each time 
+    frame_step = fps * step_time  # number of frames to jump each time
     cap.release()
 
     # Determine the number of chunks
