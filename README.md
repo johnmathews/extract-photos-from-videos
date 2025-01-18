@@ -3,20 +3,22 @@
 ## ✨ What
 
 This script analyzes video files and extracts **photographs** with solid-color
-borders, saving them as **JPEG images**. 📂
+borders, saving them as **JPEG images**.
 
 ---
 
 ## 🧐 Why
 
-I enjoy studying photography and often find YouTube to be a treasure trove of
-inspiring photographs. However, I wanted a way to:
+I enjoy studying photography and YouTube is a great way of studying other
+photographers work.
 
-- **Slow down and view photos** in any order.
+I wanted to:
+- **View photos slowly and in any order**.
 - **Annotate photos** with notes about why they work or are interesting.
 
-Initially, I took screenshots manually, but that was tedious. This tool
-automates the process, making it much easier! 🚀
+I used to take screenshots manually, but that was slow. This tool
+automates the process! 🚀
+
 
 ---
 
@@ -46,7 +48,7 @@ automates the process, making it much easier! 🚀
 
 ---
 
-## 🛠️  Dependencies
+## 🛠️ Dependencies
 
 This project uses [`uv`](https://github.com/astral-sh/uv) for managing
 dependencies and virtual environments.
@@ -64,15 +66,13 @@ extract_photos() {
 
 ## 📝 Example Usage
 
-1. Place videos in a directory, e.g., `/Users/you/Videos`.
+1. Place videos in a directory, e.g., `/Users/<username>/Videos`.
 2. Run the command:
    ```bash
-   extract_photos "/Users/you/Videos"
+   extract_photos "/Users/<username>/Videos"
    ```
 
-### Recommendations for Improvements
-
-## 💡 Recommendations for Improvements
+## 💡 Ideas for Improvements
 
 1. **Add Examples**:
    - Include example images of extracted photographs and folder structures.
