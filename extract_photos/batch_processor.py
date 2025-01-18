@@ -31,9 +31,9 @@ def process_videos_in_directory(input_directory: str, output_directory: str, **k
        print(f"🛑 Found 0 video files. Stopping.")
        return 
 
-    print(f"✅ Found {len(video_files)} videos...")
+    print(f"\033[93mFound {len(video_files)} videos...\033[0m")
     for video in video_files:
-        print(f"- {video}")
+        print(f"\033[94m- {video}\033[0m")
 
     # Iterate over all files in the input directory
     for filename in video_files:
@@ -45,7 +45,7 @@ def process_videos_in_directory(input_directory: str, output_directory: str, **k
 
         input_path = os.path.join(input_directory, filename) 
 
-        print(f"\n{datetime.now().strftime('%H:%m:%S')} 💡 Processing video: {filename}")
+        print(f"\n\033[93m{datetime.now().strftime('%H:%M:%S')} Processing video: \033[94m{filename}\033[0m")
 
         # Extract photos from the video
         extract_photos_from_video_parallel(
@@ -54,4 +54,4 @@ def process_videos_in_directory(input_directory: str, output_directory: str, **k
             **kwargs 
         ) 
 
-    print(f"{datetime.now().strftime('%H:%m:%S')} ✨ Finished processing {len(video_files)} videos ✨")
+    print(f"{datetime.now().strftime('%H:%M:%S')} ✨ Finished processing {len(video_files)} videos ✨")

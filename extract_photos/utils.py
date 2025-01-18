@@ -24,14 +24,24 @@ def display_progress(progress_dict, num_chunks):
 
         # Print the progress for each chunk
         for i in range(num_chunks):
-            progress = progress_dict.get(i, {
-                "progress": "0.00%",
-                "time": "0:00:00/0:00:00",
-                "frames": "0/0",
-                "photos": 0,
-            })
+
+            if i % 2 == 0: # i is even
+                color_code = 32
+            else: # i is odd
+                color_code =  32
+
+            progress = progress_dict.get(
+                i,
+                {
+                    "progress": "0.00%",
+                    "time": "0:00:00/0:00:00",
+                    "frames": "0/0",
+                    "photos": 0,
+                },
+            )
+
             print(
-                f"Chunk {i}: Photos: {progress['photos']} | {progress['progress']} | {progress['time']}"
+                f"\033[{color_code}mChunk {i}: Photos: {progress['photos']} | {progress['progress']} | {progress['time']}\033[0m"
             )
 
         # Check if all chunks are complete

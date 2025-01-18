@@ -32,8 +32,13 @@ def main():
     output_directory = os.path.join(input_directory, args.output_subdirectory)
     os.makedirs(output_directory, exist_ok=True)
 
-    print(f"Processing videos in: {input_directory}")
+    print(f"\nProcessing videos in: {input_directory}")
     print(f"Output photos will be saved in: {output_directory}")
+
+    print(f"step_time: {args.step_time}s") 
+    print(f"similarity threshold: {args.ssim_threshold}") 
+ 
+    print() 
 
     # Process the videos in the input directory
     process_videos_in_directory(
