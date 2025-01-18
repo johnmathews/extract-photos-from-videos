@@ -31,7 +31,6 @@ def trim_and_add_border(image, target_border_fraction=0.05):
 
     # Handle edge case: No content detected (empty mask)
     if coords.size == 0:
-        # print("⚠️ Warning: No content detected inside the border.")
         return image
 
     y_min, x_min = coords.min(axis=0)

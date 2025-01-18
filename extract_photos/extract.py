@@ -7,7 +7,8 @@ from multiprocessing import Manager, Pool
 import cv2
 import numpy as np
 from borders import trim_and_add_border
-from utils import calculate_ssim, display_progress, is_valid_photo
+from display_progress import display_progress
+from utils import calculate_ssim, is_valid_photo
 
 
 def detect_uniform_borders(frame, border_width=10):
@@ -128,7 +129,7 @@ def extract_photos_from_video_parallel(
 
     # Determine the number of chunks
     num_cores = os.cpu_count() or 1
-    num_chunks = max(1, num_cores // 4) # div by more than 4 makes laptop unusably slow. 4 seems a good balance.
+    num_chunks = max(1, num_cores // 4)  # div by more than 4 makes laptop unusably slow. 4 seems a good balance.
     chunk_size = frame_count // num_chunks
     chunks = [(i * chunk_size, (i + 1) * chunk_size) for i in range(num_chunks)]
     chunks[-1] = (chunks[-1][0], frame_count)  # Ensure the last chunk includes all remaining frames
