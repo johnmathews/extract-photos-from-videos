@@ -1,4 +1,4 @@
-# 📸 Photograph Extractor
+# Photograph Extractor 📸
 
 ## ✨ What
 
@@ -23,13 +23,13 @@ automates the process, making it much easier! 🚀
 ## ⚙️ How It Works
 
 1. **Input**:
-   - Provide a directory containing multiple video files. 🎥
+   - Provide a directory containing multiple video files.
 2. **Processing**:
    - The script identifies video files in the directory and processes them one
      by one.
 3. **Output**:
    - Creates a subdirectory for each video (named after the video file).
-   - Saves extracted photos into the corresponding subdirectory. 🖼️
+   - Saves extracted photos into the corresponding subdirectory.
 
 ### 🔍 Key Details
 
@@ -67,7 +67,8 @@ extract_photos() {
 1. Place videos in a directory, e.g., `/Users/you/Videos`.
 2. Run the command:
    ```bash
-   extract_photos "/Users/you/Videos"``
+   extract_photos "/Users/you/Videos"
+   ```
 
 
 ### Recommendations for Improvements
