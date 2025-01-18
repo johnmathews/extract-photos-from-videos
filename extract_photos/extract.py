@@ -2,7 +2,6 @@
 
 import os
 from multiprocessing import Manager, Pool
-from time import sleep
 
 import cv2
 import numpy as np
@@ -28,7 +27,7 @@ def process_chunk(video_file, output_folder, start_frame, end_frame, frame_step,
         if not ret:  # End of video
             break
 
-        # Check for white borders
+        # Processing logic (same as before)
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         left_border = gray_frame[:, :5]
         right_border = gray_frame[:, -5:]
@@ -46,7 +45,6 @@ def process_chunk(video_file, output_folder, start_frame, end_frame, frame_step,
             if prev_frame is not None:
                 similarity = calculate_ssim(frame, prev_frame)
                 if similarity < ssim_threshold:
-                    # Save the previous frame as a photo
                     trimmed_frame = trim_and_add_border(prev_frame)
                     if is_valid_photo(trimmed_frame):
                         photo_path = os.path.join(
@@ -58,7 +56,7 @@ def process_chunk(video_file, output_folder, start_frame, end_frame, frame_step,
         prev_frame = frame
         cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + frame_step)
 
-        # Update progress with a dictionary
+        # Update progress
         elapsed_time = timedelta(seconds=int((current_frame - start_frame) / fps))
         progress = (current_frame - start_frame) / total_frames * 100
         progress_dict[chunk_id] = {
@@ -67,6 +65,14 @@ def process_chunk(video_file, output_folder, start_frame, end_frame, frame_step,
             "frames": f"{current_frame}/{total_frames}",
             "photos": photo_index,
         }
+
+    # Mark chunk as complete
+    progress_dict[chunk_id] = {
+        "progress": "100.00%",
+        "time": f"{total_time}/{total_time}",
+        "frames": f"{total_frames}/{total_frames}",
+        "photos": photo_index,
+    }
 
     cap.release()
     return photo_index

@@ -16,24 +16,6 @@ def display_progress(progress_dict, num_chunks):
 
     # Print initial placeholders for each chunk
     for i in range(num_chunks):
-
-        progress = progress_dict.get(i, {
-            "progress": "0.00%",
-            "time": "0:00:00/0:00:00",
-            "frames": "0/0",
-            "photos": 0,
-        })
-
-        # Debug statement
-        if not isinstance(progress, dict):
-            print(f"Error: progress_dict[{i}] contains invalid data: {progress}")
-            progress = {
-                "progress": "0.00%",
-                "time": "0:00:00/0:00:00",
-                "frames": "0/0",
-                "photos": 0,
-            }
-
         print(f"Chunk {i}: Initializing...")
 
     while True:
@@ -42,24 +24,18 @@ def display_progress(progress_dict, num_chunks):
 
         # Print the progress for each chunk
         for i in range(num_chunks):
-            progress = progress_dict.get(
-                i,
-                {
-                    "progress": "0.00%",
-                    "time": "0:00:00/0:00:00",
-                    "frames": "0/0",
-                    "photos": 0,
-                },
-            )
+            progress = progress_dict.get(i, {
+                "progress": "0.00%",
+                "time": "0:00:00/0:00:00",
+                "frames": "0/0",
+                "photos": 0,
+            })
             print(
-                f"Chunk {i}: {progress['progress']} | {progress['time']} | {progress['frames']} | Photos: {progress['photos']}"
+                f"Chunk {i}: Photos: {progress['photos']} | {progress['progress']} | {progress['time']}"
             )
 
         # Check if all chunks are complete
-        if all(
-            progress_dict.get(i, {}).get("progress") == "100.00%"
-            for i in range(num_chunks)
-        ):
+        if all(progress_dict.get(i, {}).get("progress") == "100.00%" for i in range(num_chunks)):
             break
 
         # Add a small delay for smoother updates
