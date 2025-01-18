@@ -30,11 +30,12 @@ def display_progress(progress_dict, num_chunks):
                     "time": "0:00:00/0:00:00",
                     "frames": "0/0",
                     "photos": 0,
+                    "current_time": "0:00",
                 },
             )
 
             print(
-                f"\033[{color_code}mChunk {i}: Photos: {progress['photos']} | {progress['progress']} | {progress['time']}\033[0m"
+                f"\033[{color_code}mChunk {i}: Photos: {progress['photos']} | {progress['progress']} | {progress['time']} | {progress['current_time']} \033[0m"
             )
 
         # Check if all chunks are complete

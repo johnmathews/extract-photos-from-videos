@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 from borders import trim_and_add_border
 from display_progress import display_progress
-from utils import calculate_ssim, is_valid_photo
+from utils import calculate_ssim, is_valid_photo, setup_logger
 
 
 def detect_uniform_borders(frame, border_width=10):
@@ -41,19 +41,43 @@ def detect_uniform_borders(frame, border_width=10):
     # A valid frame must have all borders uniform
     return is_left_uniform and is_right_uniform and is_top_uniform and is_bottom_uniform
 
-
 def process_chunk(
     video_file, output_folder, start_frame, end_frame, frame_step, fps, ssim_threshold, chunk_id, progress_dict
 ):
+
+    log_dir = os.path.join(output_folder, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    start_minutes, start_seconds = divmod(start_frame / fps, 60) 
+    start_time = f"{int(start_minutes)}-{int(start_seconds):02d}" 
+    end_minutes, end_seconds = divmod(end_frame / fps, 60) 
+    end_time = f"{int(end_minutes)}-{int(end_seconds):02d}" 
+
+    log_file = os.path.join(log_dir, f"chunk_{chunk_id}__{start_time}_to_{end_time}.log")
+    logger = setup_logger(log_file)
+
+
+    logger.info(f"Starting chunk {chunk_id}: {start_time}__{end_time}")
+
     cap = cv2.VideoCapture(video_file)
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+
+
     prev_frame = None
     photo_index = 0
     total_frames = end_frame - start_frame
     total_time = timedelta(seconds=int(total_frames / fps))
 
+    start_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+    start_time_minutes, start_time_seconds = divmod(start_frame / fps, 60) 
+    start_time = f"{int(start_time_minutes)}-{int(start_time_seconds):02d}" 
+    logger.info(f"Analysing from {start_time}")
+
     while True:
         current_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+        current_time_minutes, current_time_seconds = divmod(current_frame / fps, 60) 
+        current_time = f"{int(current_time_minutes)}m{int(current_time_seconds):02d}s" 
+
         if current_frame >= end_frame:
             break
 
@@ -62,19 +86,23 @@ def process_chunk(
             break
 
         # Check for white borders
-        is_solid_color = detect_uniform_borders(frame, border_width=10)
+        is_solid_color = detect_uniform_borders(frame)
 
         # to avoid extracting the same photograph more than once,
         # check that this frame is not the same as the previous frame
         if is_solid_color:
+            logger.debug(f"{current_time}: solid color")
             if prev_frame is not None:
                 similarity = calculate_ssim(frame, prev_frame)
                 if similarity < ssim_threshold:
                     trimmed_frame = trim_and_add_border(frame)
                     if is_valid_photo(trimmed_frame):
-                        photo_path = os.path.join(output_folder, f"photo_chunk{chunk_id}_{photo_index:03d}.jpg")
+                        # file_name = f"photo_chunk{chunk_id}_{photo_index:03d}.jpg" 
+                        file_name = f"photo_chunk{chunk_id}_{current_time}.jpg" 
+                        photo_path = os.path.join(output_folder, file_name)
                         cv2.imwrite(photo_path, trimmed_frame)
                         photo_index += 1
+                        logger.debug(f"{current_time}: saved file {file_name}")
 
         prev_frame = frame
         cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + frame_step)
@@ -87,7 +115,10 @@ def process_chunk(
             "time": f"{elapsed_time}/{total_time}",
             "frames": f"{current_frame}/{total_frames}",
             "photos": photo_index,
+            "current_time": current_time, 
         }
+
+    logger.debug(f"Progress: {progress:.2f}% | Photos: {photo_index}")
 
     # Mark chunk as complete
     progress_dict[chunk_id] = {
@@ -95,8 +126,13 @@ def process_chunk(
         "time": f"{total_time}/{total_time}",
         "frames": f"{total_frames}/{total_frames}",
         "photos": photo_index,
+        "current_time": current_time, 
     }
 
+
+    # Log completion
+    logger.info(f"Analysed until {current_time}")
+    logger.info(f"Chunk {chunk_id} completed: {photo_index} photos extracted.")
     cap.release()
     return photo_index
 
@@ -136,9 +172,11 @@ def extract_photos_from_video_parallel(
 
     # Shared progress dictionary
     with Manager() as manager:
+
+        # this is the first version of progress_dict that you see, and can leave artifiacts on the console. 
         progress_dict = manager.dict(
             {
-                i: {"progress": "0.00%", "time": "0:00:00/0:00:00", "frames": "0/0", "photos": 0}
+                i: {"progress": "0.00%", "time": "0:00:00/0:00:00", "frames": "0/0", "photos": 0, "current_time": "00:00"}
                 for i in range(num_chunks)
             }
         )

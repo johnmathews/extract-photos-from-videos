@@ -21,7 +21,7 @@ def main():
     parser.add_argument(
         "-s", "--step_time", type=float, default=1.0, help="Time interval (in seconds) to skip between frames."
     )
-    parser.add_argument("-t", "--ssim_threshold", type=float, default=0.98, help="Threshold for SSIM similarity.")
+    parser.add_argument("-t", "--ssim_threshold", type=float, default=0.95, help="Threshold for SSIM similarity.")
 
     args = parser.parse_args()
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import re
+import logging
 
 import cv2
 import numpy as np
@@ -31,6 +32,19 @@ def make_safe_folder_name(title: str) -> str:
     title = title.lower()
 
     return title
+
+
+def setup_logger(log_file):
+    """
+    Set up a logger for a specific worker.
+    """
+    logger = logging.getLogger(log_file)
+    logger.setLevel(logging.DEBUG)
+    handler = logging.FileHandler(log_file)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
 
 
 def calculate_ssim(frame1, frame2):
