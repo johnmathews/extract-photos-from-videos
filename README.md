@@ -70,7 +70,6 @@ extract_photos() {
    extract_photos "/Users/you/Videos"
    ```
 
-
 ### Recommendations for Improvements
 
 ## 💡 Recommendations for Improvements
@@ -79,13 +78,16 @@ extract_photos() {
    - Include example images of extracted photographs and folder structures.
    - Show screenshots of the tool in action or sample outputs.
 2. **Configuration File**:
-   - Add a configuration file to allow users to set parameters (e.g., frame rate, SSIM threshold) without editing code.
+   - Add a configuration file to allow users to set parameters (e.g., frame
+     rate, SSIM threshold) without editing code.
 3. **Error Handling**:
-   - Mention error handling mechanisms for unsupported file formats or corrupted videos.
+   - Mention error handling mechanisms for unsupported file formats or corrupted
+     videos.
 4. **Logging**:
    - Highlight any logging capabilities (e.g., progress logs, skipped files).
 5. **Extend Compatibility**:
    - Note supported operating systems and dependencies like OpenCV.
 
 ## 📚 License
+
 This project is licensed under the MIT License. 📝
