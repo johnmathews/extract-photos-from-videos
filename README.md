@@ -25,13 +25,13 @@ automates the process! 🚀
 ## ⚙️ How It Works
 
 1. **Input**:
-   - Provide a directory containing multiple video files.
+   - Pass the tool a directory containing one or several video files.
 2. **Processing**:
-   - The script identifies video files in the directory and processes them one
-     by one.
+   - The script identifies video files in the directory and processes them sequentially.
+   - Each video is split into chunks. Chunks are processed in parallel. 
 3. **Output**:
-   - Creates a subdirectory for each video (named after the video file).
-   - Saves extracted photos into the corresponding subdirectory.
+   - The tool creates a subdirectory for each video. The subdirectory is named after the video file.
+   - Extracted photos are saved into the videos subdirectory.
 
 ### 🔍 Key Details
 
