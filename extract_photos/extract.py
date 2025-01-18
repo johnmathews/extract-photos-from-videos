@@ -29,13 +29,16 @@ def process_chunk(
         if not ret:  # End of video
             break
 
-        # Processing logic (same as before)
+        # identify the parts of the frame that are the border
+        # border thickness is `border_width` pixels
+        border_width = 5
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        left_border = gray_frame[:, :5]
-        right_border = gray_frame[:, -5:]
-        top_border = gray_frame[:5, :]
-        bottom_border = gray_frame[-5:, :]
+        left_border = gray_frame[:, :border_width]
+        right_border = gray_frame[:, -1 * border_width:]
+        top_border = gray_frame[:border_width, :]
+        bottom_border = gray_frame[-1 * border_width:, :]
 
+        # check if the frame has a border that is a solid color 
         is_solid_color = (
             np.all(left_border == left_border[0, 0])
             and np.all(right_border == right_border[0, 0])
@@ -43,6 +46,8 @@ def process_chunk(
             and np.all(bottom_border == bottom_border[0, 0])
         )
 
+        # to avoid extracting the same photograph more than once,
+        # check that this frame is not the same as the previous frame 
         if is_solid_color:
             if prev_frame is not None:
                 similarity = calculate_ssim(frame, prev_frame)
@@ -84,6 +89,17 @@ def extract_photos_from_video_parallel(
     step_time=1,
     ssim_threshold=0.98,
 ):
+    """
+    checks frames of a video to see if the frame contains a photograph.
+    a photograph is identified by having a solid color border around it.
+    the photo must be larger than a minimum size.
+
+    extracted_photos: will contain a subdirectory for each video. each subdirectory contains the photographs extracted from
+        the video.
+    step_time: amount of time in seconds between each step.
+    ssim_threshold: if a frame has a similarity highter than ssim_threshold it will be considered the same as the previous
+        frame and will not be extracted again.
+    """
     os.makedirs(output_folder, exist_ok=True)
 
     # Load video
