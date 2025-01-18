@@ -1,4 +1,4 @@
-# Photograph Extractor 📸
+# 📸 Photograph Extractor
 
 ## ✨ What
 
