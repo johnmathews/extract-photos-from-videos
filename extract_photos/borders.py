@@ -27,6 +27,13 @@ def trim_and_add_border(image, target_border_fraction=0.05):
 
     # Find the bounding box of the content
     coords = np.argwhere(mask)
+
+
+    # Handle edge case: No content detected (empty mask)
+    if coords.size == 0:
+        # print("⚠️ Warning: No content detected inside the border.")
+        return image
+
     y_min, x_min = coords.min(axis=0)
     y_max, x_max = coords.max(axis=0)
 
