@@ -270,4 +270,4 @@ def extract_photos_from_video_parallel(
             progress_thread.join()
 
     total_photos = sum(results)
-    print(f"\n✅ Extracted {total_photos} photos to {output_folder}")
+    print(f"✅  Extracted {total_photos} photos to {output_folder}/")
