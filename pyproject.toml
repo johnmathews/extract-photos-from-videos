@@ -24,7 +24,18 @@ ignore = ["E203"]  # Ignore 'whitespace before ":"'
 [tool.black]
 line-length = 120
 
+[tool.pytest.ini_options]
+addopts = "--cov=extract_photos --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["extract_photos"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
 ]

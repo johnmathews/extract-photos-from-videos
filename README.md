@@ -105,6 +105,17 @@ uv run pytest tests/ -v
 bash tests/test_epm.sh
 ```
 
+The Python tests use synthetic numpy arrays rather than real video files. The
+pure functions (`make_safe_folder_name`, `is_valid_photo`, `calculate_ssim`,
+`detect_almost_uniform_borders`, `trim_and_add_border`) are where the core
+detection logic lives, and they're fully testable this way.
+
+The untested code (`process_chunk`, `extract_photos_from_video_parallel`,
+`batch_processor`, `main`) is orchestration -- opening video files, looping
+frames, multiprocessing, and file I/O. Testing that with real video files would
+be an integration test: slow, requiring test fixtures, and mostly validating
+that OpenCV works rather than project logic.
+
 ## Remote extraction (`epm`)
 
 `bin/epm` is a shell script that SSHes into a remote machine and runs the
