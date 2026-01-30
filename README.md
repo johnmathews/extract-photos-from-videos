@@ -9,18 +9,14 @@ borders, saving them as **JPEG images**.
 
 ## 🧐 Why
 
-I enjoy studying photography and YouTube is a great way of studying other
-photographers work.
+YouTube is a great way of studying other photographers work.
 
 I wanted to:
+
 - **View photos slowly and in any order**.
 - **Annotate photos** with notes about why they work or are interesting.
 
-I used to take screenshots manually, but that was slow. This tool
-automates the process! 🚀
-
-
----
+--
 
 ## ⚙️ How It Works
 
@@ -28,7 +24,7 @@ automates the process! 🚀
    - Pass the tool a directory containing one or several video files.
 2. **Processing**:
    - The script identifies video files in the directory and processes them sequentially.
-   - Each video is split into chunks. Chunks are processed in parallel. 
+   - Each video is split into chunks. Chunks are processed in parallel.
 3. **Output**:
    - The tool creates a subdirectory for each video. The subdirectory is named after the video file.
    - Extracted photos are saved into the videos subdirectory.
