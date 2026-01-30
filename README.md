@@ -109,7 +109,7 @@ bash tests/test_epm.sh
 
 `bin/epm` is a shell script that SSHes into a remote machine and runs the
 extraction tool on a single video file. The repository and its dependencies are
-auto-installed on the remote on first run.
+auto-installed on the remote on first run and auto-updated on subsequent runs.
 
 ### Prerequisites
 
@@ -150,4 +150,7 @@ epm input_file=VIDEO output_dir=DIR [options]
 ```bash
 epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
 epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos step_time=1.0 ssim_threshold=0.95
+
+# Quote arguments containing shell special characters (e.g. brackets)
+epm input_file="/data/videos/video-[abc123].mkv" output_dir=/data/photos
 ```

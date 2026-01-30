@@ -16,7 +16,7 @@ uv run python extract_photos/main.py "/path/to/video/directory"
 uv run python extract_photos/main.py "/path/to/videos" -s 1.0 -t 0.95
 
 # Run on remote media VM (single video)
-bin/epm /data/videos/sunset.mp4 /data/photos
+epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
 
 # Run Python tests
 uv run pytest tests/
@@ -43,7 +43,7 @@ Key modules in `extract_photos/`:
 - **utils.py** - SSIM calculation (via scikit-image), photo validation, safe folder names, per-chunk logging.
 - **display_progress.py** - Real-time terminal progress display using ANSI escape codes, updated per-chunk.
 
-**bin/epm** - Bash wrapper that SSHes into `media` VM to run the tool on a single video. Auto-installs repo/deps on first run. Creates a temp dir with a symlink to bridge single-file input to the tool's directory-based interface.
+**bin/epm** - Bash wrapper that SSHes into `media` VM to run the tool on a single video. Auto-installs repo/deps on first run and auto-updates (`git pull` + `uv sync`) on subsequent runs. Arguments with special shell characters (e.g. `[]` in filenames) must be quoted. Creates a temp dir with a symlink to bridge single-file input to the tool's directory-based interface.
 
 ## Output structure
 
