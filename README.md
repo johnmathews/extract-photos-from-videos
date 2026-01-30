@@ -1,89 +1,138 @@
-# 📸 Photograph Extractor
+# Photograph Extractor
 
-## ✨ What
+Extract still photographs from video files. The tool detects frames that display
+a photograph with a solid-color border (e.g. white), deduplicates them, and
+saves each as a JPEG.
 
-This script analyzes video files and extracts **photographs** with solid-color
-borders, saving them as **JPEG images**.
+Built for studying other photographers' work from YouTube videos -- view photos
+at your own pace, in any order, and annotate them.
 
----
+## How it works
 
-## 🧐 Why
+1. Point the tool at a directory containing one or more video files.
+2. Each video is split into chunks and processed in parallel using
+   multiprocessing.
+3. Frames are sampled at a configurable interval (default: every 0.5 seconds).
+4. A frame is extracted as a photo when:
+   - It has uniform-color borders on all four sides.
+   - It is sufficiently different from the previous extracted photo (SSIM-based
+     deduplication, default threshold: 0.90).
+   - The bordered content is at least 1000x1000 pixels.
+   - The frame is static (the same image is held for several frames).
+5. Borders are trimmed and replaced with a clean border matching the original
+   color.
+6. Output is organized into per-video subdirectories.
 
-YouTube is a great way of studying other photographers work.
+Supported video formats: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`.
 
-I wanted to:
+## Setup
 
-- **View photos slowly and in any order**.
-- **Annotate photos** with notes about why they work or are interesting.
+Requires Python >= 3.13 and [uv](https://github.com/astral-sh/uv).
 
---
+```bash
+git clone https://github.com/johnmathews/extract-photos-from-videos.git
+cd extract-photos
+uv sync
+```
 
-## ⚙️ How It Works
+## Usage
 
-1. **Input**:
-   - Pass the tool a directory containing one or several video files.
-2. **Processing**:
-   - The script identifies video files in the directory and processes them sequentially.
-   - Each video is split into chunks. Chunks are processed in parallel.
-3. **Output**:
-   - The tool creates a subdirectory for each video. The subdirectory is named after the video file.
-   - Extracted photos are saved into the videos subdirectory.
+```bash
+uv run python extract_photos/main.py INPUT_DIR [options]
+```
 
-### 🔍 Key Details
+### Arguments
 
-- **Frame Selection**:
-  - The tool analyzes one frame per second to save time.
-- **Photo Detection**:
-  - Detects photographs with a solid-color border (e.g., white). Full-frame
-    photos without borders are not extracted.
-- **Duplicate Avoidance**:
-  - Skips duplicate photos if the same image is displayed for more than 1
-    second.
-  - Uses **Structural Similarity Index (SSIM)** with a default threshold of
-    `0.98` (configurable).
+| Argument | Description |
+|----------|-------------|
+| `INPUT_DIR` | Directory containing video files |
 
----
+### Options
 
-## 🛠️ Dependencies
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o, --output_subdirectory` | `extracted_photos` | Name of the output subdirectory within `INPUT_DIR` |
+| `-s, --step_time` | `0.5` | Seconds between sampled frames |
+| `-t, --ssim_threshold` | `0.90` | SSIM threshold for deduplication (0-1, higher = stricter) |
 
-This project uses [`uv`](https://github.com/astral-sh/uv) for managing
-dependencies and virtual environments.
+### Examples
 
-### 🏃 Run the Tool Anywhere!
+```bash
+# Process all videos in a directory
+uv run python extract_photos/main.py ~/Videos
 
-To run the script from anywhere without manually activating the virtual
-environment, add the following function to your `~/.zshrc` or `~/.bashrc`:
+# Slower sampling, stricter deduplication
+uv run python extract_photos/main.py ~/Videos -s 1.0 -t 0.95
+```
+
+### Shell function
+
+To run from anywhere without activating the virtualenv, add to your
+`~/.zshrc` or `~/.bashrc`:
 
 ```bash
 extract_photos() {
-    (source <path-to-repo>/.venv/bin/activate && uv run python <path-to-repo>/extract_photos/main.py "$@")
+    (source /path/to/extract-photos/.venv/bin/activate && \
+     uv run python /path/to/extract-photos/extract_photos/main.py "$@")
 }
 ```
 
-## 📝 Example Usage
+## Output structure
 
-1. Place videos in a directory, e.g., `/Users/<username>/Videos`.
-2. Run the command:
-   ```bash
-   extract_photos "/Users/<username>/Videos"
-   ```
+```
+INPUT_DIR/
+  extracted_photos/
+    video-name/
+      video-name_0m30s.jpg
+      video-name_2m15s.jpg
+      logs/
+        video-name__chunk_0__0m0s_to_5m0s.log
+        video-name__chunk_1__5m0s_to_10m0s.log
+    another-video/
+      ...
+```
 
-## 💡 Ideas for Improvements
+Each photo filename includes the video name and the timestamp where it was
+found. Per-chunk log files record detailed extraction decisions.
 
-1. **Add Examples**:
-   - Include example images of extracted photographs and folder structures.
-   - Show screenshots of the tool in action or sample outputs.
-2. **Configuration File**:
-   - Add a configuration file to allow users to set parameters (e.g., frame
-     rate, SSIM threshold) without editing code.
-3. **Error Handling**:
-   - Mention error handling mechanisms for unsupported file formats or corrupted
-     videos.
-4. **Logging**:
-   - Highlight any logging capabilities (e.g., progress logs, skipped files).
-5. **Extend Compatibility**:
-   - Note supported operating systems and dependencies like OpenCV.
+## Remote extraction (`epm`)
 
-## 📚 License
+`bin/epm` is a shell script that SSHes into a remote machine and runs the
+extraction tool on a single video file. The repository and its dependencies are
+auto-installed on the remote on first run.
 
-This project is licensed under the MIT License. 📝
+### Prerequisites
+
+`ssh media` must be configured and working (via `~/.ssh/config` or equivalent).
+
+### Installation
+
+Add `bin/` to your PATH, or symlink the script:
+
+```bash
+ln -s /path/to/extract-photos/bin/epm /usr/local/bin/epm
+```
+
+### Usage
+
+```bash
+epm VIDEO_FILE OUTPUT_DIR [options]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `VIDEO_FILE` | Path to a video file on the remote machine |
+| `OUTPUT_DIR` | Directory on the remote machine to copy extracted photos into |
+
+Options `-s`, `-t`, and `-h` work the same as the local tool.
+
+### Examples
+
+```bash
+epm /data/videos/sunset.mp4 /data/photos
+epm /data/videos/sunset.mp4 /data/photos -s 1.0 -t 0.95
+```
+
+## License
+
+MIT

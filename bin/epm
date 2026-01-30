@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_DIR="extract-photos"
+REPO_URL="https://github.com/johnmathews/extract-photos-from-videos.git"
+SSH_HOST="media"
+
+usage() {
+    cat <<USAGE
+Usage: epm VIDEO_FILE OUTPUT_DIR [options]
+
+Extract photos from a video file on the media VM.
+
+Arguments:
+  VIDEO_FILE    Path to the video file on the media VM
+  OUTPUT_DIR    Directory on the media VM to copy extracted photos into
+
+Options:
+  -s, --step_time SECONDS        Time between sampled frames (default: 0.5)
+  -t, --ssim_threshold FLOAT     SSIM similarity threshold (default: 0.90)
+  -h, --help                     Show this help message
+
+Prerequisites:
+  ssh media must be configured and working.
+  The repo and dependencies are auto-installed on first run.
+
+Examples:
+  epm /data/videos/sunset.mp4 /data/photos
+  epm /data/videos/sunset.mp4 /data/photos -s 1.0 -t 0.95
+USAGE
+}
+
+# --- Parse arguments ---
+VIDEO=""
+OUTPUT=""
+EXTRA_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -s|--step_time)
+            EXTRA_ARGS+=("-s" "$2")
+            shift 2
+            ;;
+        -t|--ssim_threshold)
+            EXTRA_ARGS+=("-t" "$2")
+            shift 2
+            ;;
+        -*)
+            echo "Error: unknown option '$1'" >&2
+            usage >&2
+            exit 1
+            ;;
+        *)
+            if [[ -z "$VIDEO" ]]; then
+                VIDEO="$1"
+            elif [[ -z "$OUTPUT" ]]; then
+                OUTPUT="$1"
+            else
+                echo "Error: unexpected argument '$1'" >&2
+                usage >&2
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [[ -z "$VIDEO" || -z "$OUTPUT" ]]; then
+    echo "Error: VIDEO_FILE and OUTPUT_DIR are required." >&2
+    echo >&2
+    usage >&2
+    exit 1
+fi
+
+# --- Auto-setup on remote ---
+echo "Checking remote setup..."
+ssh "$SSH_HOST" bash -l <<'SETUP'
+set -euo pipefail
+REPO_DIR="$HOME/extract-photos"
+REPO_URL="https://github.com/johnmathews/extract-photos-from-videos.git"
+
+if [ ! -d "$REPO_DIR" ]; then
+    echo "Setting up extract-photos on remote..."
+
+    # Install uv if not present
+    if ! command -v uv &>/dev/null; then
+        echo "Installing uv..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+    fi
+
+    echo "Cloning repository..."
+    git clone "$REPO_URL" "$REPO_DIR"
+
+    echo "Installing dependencies..."
+    cd "$REPO_DIR"
+    uv sync
+
+    echo "Remote setup complete."
+else
+    echo "Remote repo already exists."
+fi
+SETUP
+
+# --- Run extraction ---
+echo "Extracting photos from: $VIDEO"
+echo "Output directory: $OUTPUT"
+
+# Use -t for TTY allocation if running interactively
+SSH_TTY_FLAG=""
+if [ -t 0 ]; then
+    SSH_TTY_FLAG="-t"
+fi
+
+ssh $SSH_TTY_FLAG "$SSH_HOST" bash -l -s -- "$VIDEO" "$OUTPUT" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}" <<'EOF'
+set -euo pipefail
+
+VIDEO="$1"
+OUTPUT="$2"
+shift 2
+
+# Remaining args are extra flags for main.py
+EXTRA=("$@")
+
+REPO_DIR="$HOME/extract-photos"
+
+# Validate inputs
+if [ ! -f "$VIDEO" ]; then
+    echo "Error: video file not found: $VIDEO" >&2
+    exit 1
+fi
+
+# Create temp directory with cleanup trap
+TMPDIR="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR"' EXIT
+
+# Symlink the video into the temp directory
+ln -s "$(realpath "$VIDEO")" "$TMPDIR/"
+
+# Run the extraction tool
+cd "$REPO_DIR"
+source .venv/bin/activate
+python extract_photos/main.py "$TMPDIR" "${EXTRA[@]+"${EXTRA[@]}"}"
+
+# Determine the video-specific output subdirectory
+VIDEO_BASENAME="$(basename "$VIDEO")"
+VIDEO_NAME="${VIDEO_BASENAME%.*}"
+EXTRACTED_DIR="$TMPDIR/extracted_photos/$VIDEO_NAME"
+
+if [ ! -d "$EXTRACTED_DIR" ]; then
+    echo "No photos extracted."
+    exit 0
+fi
+
+PHOTO_COUNT="$(find "$EXTRACTED_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')"
+if [ "$PHOTO_COUNT" -eq 0 ]; then
+    echo "No photos extracted."
+    exit 0
+fi
+
+# Copy extracted photos to output directory
+mkdir -p "$OUTPUT"
+cp "$EXTRACTED_DIR"/* "$OUTPUT/"
+echo "Copied $PHOTO_COUNT photo(s) to $OUTPUT"
+EOF
+
+echo "Done."
