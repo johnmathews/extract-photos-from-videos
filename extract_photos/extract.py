@@ -127,6 +127,7 @@ def process_chunk(
 
     prev_frame = None
     photo_index = 0
+    progress = 0.0
     total_frames = end_frame - start_frame
     total_time = timedelta(seconds=int(total_frames / fps))
 

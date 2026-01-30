@@ -97,7 +97,10 @@ if [ ! -d "$REPO_DIR" ]; then
 
     echo "Remote setup complete."
 else
-    echo "Remote repo already exists."
+    echo "Updating remote repo..."
+    cd "$REPO_DIR"
+    git pull --ff-only
+    uv sync --quiet
 fi
 SETUP
 
@@ -111,7 +114,9 @@ if [ -t 0 ]; then
   SSH_TTY_FLAG="-t"
 fi
 
-ssh $SSH_TTY_FLAG "$SSH_HOST" bash -l -s -- "$VIDEO" "$OUTPUT" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}" <<'EOF'
+# Shell-escape arguments so the remote login shell (which may be zsh) doesn't
+# glob-expand characters like [] in filenames.
+ssh $SSH_TTY_FLAG "$SSH_HOST" "bash -l -s -- $(printf '%q ' "$VIDEO" "$OUTPUT" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")" <<'EOF'
 set -euo pipefail
 
 VIDEO="$1"
