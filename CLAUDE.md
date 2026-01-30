@@ -18,8 +18,11 @@ uv run python extract_photos/main.py "/path/to/videos" -s 1.0 -t 0.95
 # Run on remote media VM (single video)
 bin/epm /data/videos/sunset.mp4 /data/photos
 
-# Run tests
-pytest tests/
+# Run Python tests
+uv run pytest tests/
+
+# Run shell tests for bin/epm
+bash tests/test_epm.sh
 
 # Install dependencies
 uv sync

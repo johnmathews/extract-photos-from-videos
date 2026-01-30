@@ -23,3 +23,8 @@ ignore = ["E203"]  # Ignore 'whitespace before ":"'
 
 [tool.black]
 line-length = 120
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

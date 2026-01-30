@@ -43,17 +43,17 @@ uv run python extract_photos/main.py INPUT_DIR [options]
 
 ### Arguments
 
-| Argument | Description |
-|----------|-------------|
+| Argument    | Description                      |
+| ----------- | -------------------------------- |
 | `INPUT_DIR` | Directory containing video files |
 
 ### Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `-o, --output_subdirectory` | `extracted_photos` | Name of the output subdirectory within `INPUT_DIR` |
-| `-s, --step_time` | `0.5` | Seconds between sampled frames |
-| `-t, --ssim_threshold` | `0.90` | SSIM threshold for deduplication (0-1, higher = stricter) |
+| Option                      | Default            | Description                                               |
+| --------------------------- | ------------------ | --------------------------------------------------------- |
+| `-o, --output_subdirectory` | `extracted_photos` | Name of the output subdirectory within `INPUT_DIR`        |
+| `-s, --step_time`           | `0.5`              | Seconds between sampled frames                            |
+| `-t, --ssim_threshold`      | `0.90`             | SSIM threshold for deduplication (0-1, higher = stricter) |
 
 ### Examples
 
@@ -95,6 +95,16 @@ INPUT_DIR/
 Each photo filename includes the video name and the timestamp where it was
 found. Per-chunk log files record detailed extraction decisions.
 
+## Testing
+
+```bash
+# Python unit tests (utils, borders, border detection)
+uv run pytest tests/ -v
+
+# Shell tests for bin/epm argument parsing
+bash tests/test_epm.sh
+```
+
 ## Remote extraction (`epm`)
 
 `bin/epm` is a shell script that SSHes into a remote machine and runs the
@@ -107,32 +117,37 @@ auto-installed on the remote on first run.
 
 ### Installation
 
-Add `bin/` to your PATH, or symlink the script:
+Symlink the script into a directory on your PATH so it can be run from any
+shell:
 
 ```bash
-ln -s /path/to/extract-photos/bin/epm /usr/local/bin/epm
+ln -s "$(pwd)/bin/epm" /usr/local/bin/epm
 ```
+
+Run this from the root of the repository. After that, `epm` is available
+globally. The symlink points back to the repo, so updates to the script take
+effect immediately.
 
 ### Usage
 
 ```bash
-epm VIDEO_FILE OUTPUT_DIR [options]
+epm input_file=VIDEO output_dir=DIR [options]
 ```
 
-| Argument | Description |
-|----------|-------------|
-| `VIDEO_FILE` | Path to a video file on the remote machine |
-| `OUTPUT_DIR` | Directory on the remote machine to copy extracted photos into |
+| Argument          | Description                                                   |
+| ----------------- | ------------------------------------------------------------- |
+| `input_file=PATH` | Path to a video file on the remote machine                    |
+| `output_dir=PATH` | Directory on the remote machine to copy extracted photos into |
 
-Options `-s`, `-t`, and `-h` work the same as the local tool.
+| Option                  | Default | Description                                               |
+| ----------------------- | ------- | --------------------------------------------------------- |
+| `step_time=SECONDS`     | `0.5`   | Seconds between sampled frames                            |
+| `ssim_threshold=FLOAT`  | `0.90`  | SSIM threshold for deduplication (0-1, higher = stricter) |
+| `help`                  |         | Show usage                                                |
 
-### Examples
+### Example Commands
 
 ```bash
-epm /data/videos/sunset.mp4 /data/photos
-epm /data/videos/sunset.mp4 /data/photos -s 1.0 -t 0.95
+epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
+epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos step_time=1.0 ssim_threshold=0.95
 ```
-
-## License
-
-MIT
