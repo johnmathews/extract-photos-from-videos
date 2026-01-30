@@ -22,7 +22,18 @@
       "Bash(git -C /Users/john/projects/photo-video/extract-photos commit -m \"$\\(cat <<''EOF''\nAdd tests for utils, borders, border detection, and epm arg parsing\n\nCovers make_safe_folder_name, is_valid_photo, calculate_ssim,\ntrim_and_add_border, detect_almost_uniform_borders \\(Python\\), and\nbin/epm argument parsing \\(bash\\). Adds pytest as dev dependency and\ndocuments test commands in CLAUDE.md and README.md.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git -C /Users/john/projects/photo-video/extract-photos add CLAUDE.md README.md)",
       "Bash(git -C /Users/john/projects/photo-video/extract-photos commit --amend --no-edit)",
-      "Bash(git -C /Users/john/projects/photo-video/extract-photos push -u origin epm)"
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos push -u origin epm)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos add bin/epm extract_photos/extract.py)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos commit -m \"$\\(cat <<''EOF''\nFix UnboundLocalError in process_chunk and auto-update remote repo\n\n- Initialize `progress = 0.0` before the loop so it''s defined even\n  when the loop breaks on the first iteration \\(e.g. AV1 decode failure\\).\n- Shell-escape SSH arguments with printf ''%q'' to prevent the remote\n  login shell from glob-expanding brackets in filenames.\n- Run git pull + uv sync on the remote instead of skipping when the\n  repo already exists, so code changes propagate automatically.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos push)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos checkout main)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos merge epm)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos push origin main)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos stash --include-untracked)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos checkout epm)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos stash pop)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos diff CLAUDE.md README.md)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos commit -m \"$\\(cat <<''EOF''\nUpdate docs: fix epm syntax, document auto-update and quoting\n\n- Fix epm example in CLAUDE.md to use key=value argument syntax.\n- Document that epm auto-updates the remote repo on each run.\n- Add example showing quoted arguments for filenames with brackets.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }
