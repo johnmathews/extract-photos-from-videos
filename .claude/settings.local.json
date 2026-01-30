@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos log --oneline -20)",
+      "Bash(git checkout:*)",
+      "Bash(chmod:*)",
+      "Bash(/Users/john/projects/photo-video/extract-photos/bin/epm:*)",
+      "Bash(echo:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(bash:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(/Users/john/projects/photo-video/extract-photos/.venv/bin/python:*)",
+      "Bash(uv run:*)",
+      "Bash(uv add:*)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos status)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos diff)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos log:*)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos add tests/test_utils.py tests/test_borders.py tests/test_extract.py tests/test_epm.sh pyproject.toml uv.lock CLAUDE.md README.md)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos diff --cached --stat)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos commit -m \"$\\(cat <<''EOF''\nAdd tests for utils, borders, border detection, and epm arg parsing\n\nCovers make_safe_folder_name, is_valid_photo, calculate_ssim,\ntrim_and_add_border, detect_almost_uniform_borders \\(Python\\), and\nbin/epm argument parsing \\(bash\\). Adds pytest as dev dependency and\ndocuments test commands in CLAUDE.md and README.md.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos add CLAUDE.md README.md)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos commit --amend --no-edit)",
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos push -u origin epm)"
+    ]
+  }
+}

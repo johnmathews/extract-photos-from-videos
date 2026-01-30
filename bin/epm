@@ -1,32 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="extract-photos"
-REPO_URL="https://github.com/johnmathews/extract-photos-from-videos.git"
 SSH_HOST="media"
 
 usage() {
-    cat <<USAGE
-Usage: epm VIDEO_FILE OUTPUT_DIR [options]
+  cat <<USAGE
+Usage: epm input_file=VIDEO output_dir=DIR [options]
 
 Extract photos from a video file on the media VM.
 
 Arguments:
-  VIDEO_FILE    Path to the video file on the media VM
-  OUTPUT_DIR    Directory on the media VM to copy extracted photos into
+  input_file=PATH    Path to the video file on the media VM
+  output_dir=PATH    Directory on the media VM to copy extracted photos into
 
 Options:
-  -s, --step_time SECONDS        Time between sampled frames (default: 0.5)
-  -t, --ssim_threshold FLOAT     SSIM similarity threshold (default: 0.90)
-  -h, --help                     Show this help message
+  step_time=SECONDS        Time between sampled frames (default: 0.5)
+  ssim_threshold=FLOAT     SSIM similarity threshold (default: 0.90)
+  help                     Show this help message
 
 Prerequisites:
   ssh media must be configured and working.
   The repo and dependencies are auto-installed on first run.
 
 Examples:
-  epm /data/videos/sunset.mp4 /data/photos
-  epm /data/videos/sunset.mp4 /data/photos -s 1.0 -t 0.95
+  epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
+  epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos step_time=1.0 ssim_threshold=0.95
 USAGE
 }
 
@@ -35,45 +33,37 @@ VIDEO=""
 OUTPUT=""
 EXTRA_ARGS=()
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -h|--help)
-            usage
-            exit 0
-            ;;
-        -s|--step_time)
-            EXTRA_ARGS+=("-s" "$2")
-            shift 2
-            ;;
-        -t|--ssim_threshold)
-            EXTRA_ARGS+=("-t" "$2")
-            shift 2
-            ;;
-        -*)
-            echo "Error: unknown option '$1'" >&2
-            usage >&2
-            exit 1
-            ;;
-        *)
-            if [[ -z "$VIDEO" ]]; then
-                VIDEO="$1"
-            elif [[ -z "$OUTPUT" ]]; then
-                OUTPUT="$1"
-            else
-                echo "Error: unexpected argument '$1'" >&2
-                usage >&2
-                exit 1
-            fi
-            shift
-            ;;
-    esac
+for arg in "$@"; do
+  case "$arg" in
+  help)
+    usage
+    exit 0
+    ;;
+  input_file=*)
+    VIDEO="${arg#input_file=}"
+    ;;
+  output_dir=*)
+    OUTPUT="${arg#output_dir=}"
+    ;;
+  step_time=*)
+    EXTRA_ARGS+=("-s" "${arg#step_time=}")
+    ;;
+  ssim_threshold=*)
+    EXTRA_ARGS+=("-t" "${arg#ssim_threshold=}")
+    ;;
+  *)
+    echo "Error: unknown argument '$arg'" >&2
+    usage >&2
+    exit 1
+    ;;
+  esac
 done
 
 if [[ -z "$VIDEO" || -z "$OUTPUT" ]]; then
-    echo "Error: VIDEO_FILE and OUTPUT_DIR are required." >&2
-    echo >&2
-    usage >&2
-    exit 1
+  echo "Error: input_file and output_dir are required." >&2
+  echo >&2
+  usage >&2
+  exit 1
 fi
 
 # --- Auto-setup on remote ---
@@ -85,6 +75,12 @@ REPO_URL="https://github.com/johnmathews/extract-photos-from-videos.git"
 
 if [ ! -d "$REPO_DIR" ]; then
     echo "Setting up extract-photos on remote..."
+
+    # Check prerequisites
+    if ! command -v git &>/dev/null; then
+        echo "Error: git is not installed on the remote machine." >&2
+        exit 1
+    fi
 
     # Install uv if not present
     if ! command -v uv &>/dev/null; then
@@ -112,7 +108,7 @@ echo "Output directory: $OUTPUT"
 # Use -t for TTY allocation if running interactively
 SSH_TTY_FLAG=""
 if [ -t 0 ]; then
-    SSH_TTY_FLAG="-t"
+  SSH_TTY_FLAG="-t"
 fi
 
 ssh $SSH_TTY_FLAG "$SSH_HOST" bash -l -s -- "$VIDEO" "$OUTPUT" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}" <<'EOF'

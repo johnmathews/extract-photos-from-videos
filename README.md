@@ -139,11 +139,11 @@ epm input_file=VIDEO output_dir=DIR [options]
 | `input_file=PATH` | Path to a video file on the remote machine                    |
 | `output_dir=PATH` | Directory on the remote machine to copy extracted photos into |
 
-| Option                  | Default | Description                                               |
-| ----------------------- | ------- | --------------------------------------------------------- |
-| `step_time=SECONDS`     | `0.5`   | Seconds between sampled frames                            |
-| `ssim_threshold=FLOAT`  | `0.90`  | SSIM threshold for deduplication (0-1, higher = stricter) |
-| `help`                  |         | Show usage                                                |
+| Option                 | Default | Description                                               |
+| ---------------------- | ------- | --------------------------------------------------------- |
+| `step_time=SECONDS`    | `0.5`   | Seconds between sampled frames                            |
+| `ssim_threshold=FLOAT` | `0.90`  | SSIM threshold for deduplication (0-1, higher = stricter) |
+| `help`                 |         | Show usage                                                |
 
 ### Example Commands
 
