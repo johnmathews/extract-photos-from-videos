@@ -108,9 +108,11 @@ SETUP
 echo "Extracting photos from: $VIDEO"
 echo "Output directory: $OUTPUT"
 
+# -tt forces PTY allocation so the remote process gets SIGHUP when the
+# SSH connection drops (e.g. local Ctrl-C).
 # Shell-escape arguments so the remote login shell (which may be zsh) doesn't
 # glob-expand characters like [] in filenames.
-ssh "$SSH_HOST" "bash -l -s -- $(printf '%q ' "$VIDEO" "$OUTPUT" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")" <<'EOF'
+ssh -tt "$SSH_HOST" "bash -l -s -- $(printf '%q ' "$VIDEO" "$OUTPUT" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")" <<'EOF'
 set -euo pipefail
 
 VIDEO="$1"
