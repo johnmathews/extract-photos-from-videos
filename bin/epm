@@ -108,15 +108,9 @@ SETUP
 echo "Extracting photos from: $VIDEO"
 echo "Output directory: $OUTPUT"
 
-# Use -t for TTY allocation if running interactively
-SSH_TTY_FLAG=""
-if [ -t 0 ]; then
-  SSH_TTY_FLAG="-t"
-fi
-
 # Shell-escape arguments so the remote login shell (which may be zsh) doesn't
 # glob-expand characters like [] in filenames.
-ssh $SSH_TTY_FLAG "$SSH_HOST" "bash -l -s -- $(printf '%q ' "$VIDEO" "$OUTPUT" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")" <<'EOF'
+ssh "$SSH_HOST" "bash -l -s -- $(printf '%q ' "$VIDEO" "$OUTPUT" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")" <<'EOF'
 set -euo pipefail
 
 VIDEO="$1"
@@ -144,7 +138,7 @@ ln -s "$(realpath "$VIDEO")" "$TMPDIR/"
 # Run the extraction tool
 cd "$REPO_DIR"
 source .venv/bin/activate
-python extract_photos/main.py "$TMPDIR" "${EXTRA[@]+"${EXTRA[@]}"}"
+PYTHONUNBUFFERED=1 python extract_photos/main.py "$TMPDIR" "${EXTRA[@]+"${EXTRA[@]}"}"
 
 # Find the video-specific output subdirectory (name is lowercased/sanitised by the tool)
 EXTRACTED_BASE="$TMPDIR/extracted_photos"
