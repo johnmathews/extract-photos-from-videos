@@ -5,13 +5,14 @@ SSH_HOST="media"
 
 usage() {
   cat <<USAGE
-Usage: epm input_file=VIDEO output_dir=DIR [options]
+Usage: epm input_file=VIDEO [output_dir=DIR] [options]
 
 Extract photos from a video file on the media VM.
 
 Arguments:
   input_file=PATH    Path to the video file on the media VM
   output_dir=PATH    Directory on the media VM to copy extracted photos into
+                     (default: /mnt/nfs/photos/reference)
 
 Options:
   step_time=SECONDS        Time between sampled frames (default: 0.5)
@@ -23,6 +24,7 @@ Prerequisites:
   The repo and dependencies are auto-installed on first run.
 
 Examples:
+  epm input_file=/data/videos/sunset.mp4
   epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
   epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos step_time=1.0 ssim_threshold=0.95
 USAGE
@@ -30,7 +32,7 @@ USAGE
 
 # --- Parse arguments ---
 VIDEO=""
-OUTPUT=""
+OUTPUT="/mnt/nfs/photos/reference"
 EXTRA_ARGS=()
 
 for arg in "$@"; do
@@ -59,8 +61,8 @@ for arg in "$@"; do
   esac
 done
 
-if [[ -z "$VIDEO" || -z "$OUTPUT" ]]; then
-  echo "Error: input_file and output_dir are required." >&2
+if [[ -z "$VIDEO" ]]; then
+  echo "Error: input_file is required." >&2
   echo >&2
   usage >&2
   exit 1
@@ -165,6 +167,10 @@ FINAL_OUTPUT="$OUTPUT/$VIDEO_SUBDIR"
 mkdir -p "$FINAL_OUTPUT"
 find "$EXTRACTED_DIR" -maxdepth 1 -type f -exec cp {} "$FINAL_OUTPUT/" \;
 echo "Copied $PHOTO_COUNT photo(s) to $FINAL_OUTPUT"
+
+# Copy the original video file alongside the photos
+cp "$(realpath "$VIDEO")" "$FINAL_OUTPUT/"
+echo "Copied video to $FINAL_OUTPUT/$(basename "$VIDEO")"
 EXTRACTION
 
 # Execute with -tt so Ctrl-C kills the remote process. The trap cleans up

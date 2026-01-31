@@ -23,17 +23,18 @@ check "help exits 0" $?
 echo "$output" | grep -q "Usage:"
 check "help shows Usage:" $?
 
-# 2. No args -- exits 1, stderr contains "input_file and output_dir are required"
+# 2. No args -- exits 1, stderr contains "input_file is required"
 output=$("$EPM" 2>&1)
 [[ $? -ne 0 ]]; check "no args exits non-zero" $?
-echo "$output" | grep -q "input_file and output_dir are required"
+echo "$output" | grep -q "input_file is required"
 check "no args mentions required" $?
 
-# 3. input_file only -- exits 1, stderr contains "required"
+# 3. input_file only -- parsing succeeds (uses default output_dir), but SSH fails
 output=$("$EPM" input_file=/foo 2>&1)
-[[ $? -ne 0 ]]; check "input_file only exits non-zero" $?
-echo "$output" | grep -q "required"
-check "input_file only mentions required" $?
+rc=$?
+[[ $rc -ne 0 ]]; check "input_file only exits non-zero (ssh unreachable)" $?
+echo "$output" | grep -q "unknown argument" && failed=1 || failed=0
+check "input_file only no 'unknown argument'" $failed
 
 # 4. output_dir only -- exits 1, stderr contains "required"
 output=$("$EPM" output_dir=/bar 2>&1)
@@ -59,7 +60,7 @@ rc=$?
 [[ $rc -ne 0 ]]; check "valid args exits non-zero (ssh unreachable)" $?
 echo "$output" | grep -q "unknown argument" && failed=1 || failed=0
 check "valid args no 'unknown argument'" $failed
-echo "$output" | grep -q "input_file and output_dir are required" && failed=1 || failed=0
+echo "$output" | grep -q "input_file is required" && failed=1 || failed=0
 check "valid args no 'required'" $failed
 
 # 8. Optional args with valid required args -- parsing succeeds
@@ -68,7 +69,7 @@ rc=$?
 [[ $rc -ne 0 ]]; check "optional args exits non-zero (ssh unreachable)" $?
 echo "$output" | grep -q "unknown argument" && failed=1 || failed=0
 check "optional args no 'unknown argument'" $failed
-echo "$output" | grep -q "input_file and output_dir are required" && failed=1 || failed=0
+echo "$output" | grep -q "input_file is required" && failed=1 || failed=0
 check "optional args no 'required'" $failed
 
 # 9. Args in any order -- parsing succeeds
@@ -77,8 +78,13 @@ rc=$?
 [[ $rc -ne 0 ]]; check "reordered args exits non-zero (ssh unreachable)" $?
 echo "$output" | grep -q "unknown argument" && failed=1 || failed=0
 check "reordered args no 'unknown argument'" $failed
-echo "$output" | grep -q "input_file and output_dir are required" && failed=1 || failed=0
+echo "$output" | grep -q "input_file is required" && failed=1 || failed=0
 check "reordered args no 'required'" $failed
+
+# 10. Default output_dir -- uses /mnt/nfs/photos/reference
+output=$("$EPM" input_file=/foo 2>&1)
+echo "$output" | grep -q "/mnt/nfs/photos/reference"
+check "default output_dir shown" $?
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
