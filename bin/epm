@@ -142,14 +142,19 @@ PYTHONUNBUFFERED=1 python extract_photos/main.py "$TMPDIR" "${EXTRA[@]+"${EXTRA[
 
 # Find the video-specific output subdirectory (name is lowercased/sanitised by the tool)
 EXTRACTED_BASE="$TMPDIR/extracted_photos"
+echo "DEBUG: EXTRACTED_BASE=$EXTRACTED_BASE"
+echo "DEBUG: contents of EXTRACTED_BASE:" && ls -la "$EXTRACTED_BASE" 2>&1 || true
 EXTRACTED_DIR="$(find "$EXTRACTED_BASE" -mindepth 1 -maxdepth 1 -type d | head -1)"
+echo "DEBUG: EXTRACTED_DIR=$EXTRACTED_DIR"
 
 if [ -z "$EXTRACTED_DIR" ] || [ ! -d "$EXTRACTED_DIR" ]; then
     echo "No photos extracted."
     exit 0
 fi
 
+echo "DEBUG: contents of EXTRACTED_DIR:" && ls -la "$EXTRACTED_DIR" 2>&1 || true
 PHOTO_COUNT="$(find "$EXTRACTED_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')"
+echo "DEBUG: PHOTO_COUNT=$PHOTO_COUNT"
 if [ "$PHOTO_COUNT" -eq 0 ]; then
     echo "No photos extracted."
     exit 0
