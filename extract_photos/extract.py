@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from threading import Thread
 
 import cv2
 import numpy as np
@@ -66,33 +67,8 @@ def detect_almost_uniform_borders(frame, border_width=5, threshold=10):
     return is_left_uniform and is_right_uniform and is_top_uniform and is_bottom_uniform
 
 
-def transcode_lowres(video_file, video_duration_sec):
-    """Transcode a video to 320px wide low-res copy for fast scanning.
-
-    Shows a single-line progress bar during transcoding.
-    Returns path to the temporary low-res file.
-    Raises RuntimeError if ffmpeg is not found or fails.
-    """
-    tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-    tmp.close()
-    # -progress pipe:1 outputs line-buffered key=value progress to stdout,
-    # which avoids the pipe-buffering issues of ffmpeg's \r-delimited stderr.
-    cmd = [
-        "ffmpeg", "-i", video_file, "-vf", "scale=320:-2", "-an", "-q:v", "5",
-        "-progress", "pipe:1", "-nostats",
-        tmp.name, "-y",
-    ]
-
-    try:
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    except FileNotFoundError:
-        os.unlink(tmp.name)
-        raise RuntimeError("ffmpeg not found. Install ffmpeg to use this tool.")
-
-    wall_start = time.monotonic()
-    last_update = 0.0
-    duration_us = video_duration_sec * 1_000_000
-
+def _read_ffmpeg_progress(process, duration_us, progress_list, index):
+    """Read ffmpeg -progress output and update progress_list[index] with percentage."""
     for raw_line in process.stdout:
         line = raw_line.decode("utf-8", errors="replace").strip()
         if line.startswith("out_time_us="):
@@ -101,31 +77,98 @@ def transcode_lowres(video_file, video_duration_sec):
             except ValueError:
                 continue
             if duration_us > 0:
-                pct = min(current_us / duration_us * 100, 100)
-                now = time.monotonic()
-                if now - last_update >= 1.0:
-                    wall_elapsed = now - wall_start
-                    if pct > 2.0:
-                        eta_sec = wall_elapsed / (pct / 100) - wall_elapsed
-                        eta_str = f"ETA {format_time(eta_sec)}"
-                    else:
-                        eta_str = "ETA --:--"
-                    bar = build_progress_bar(pct)
-                    sys.stdout.write(f"\r {bar}  {pct:5.1f}%   {eta_str}\033[K")
-                    sys.stdout.flush()
-                    last_update = now
+                progress_list[index] = min(current_us / duration_us * 100, 100)
 
-    process.wait()
 
-    # Show completed bar, then move to next line
+def transcode_lowres(video_file, video_duration_sec):
+    """Transcode a video to 320px wide low-res copy for fast scanning.
+
+    Splits the video in half and transcodes both halves in parallel,
+    then concatenates the results. Shows a combined progress bar.
+    Returns path to the temporary low-res file.
+    Raises RuntimeError if ffmpeg is not found or fails.
+    """
+    midpoint = video_duration_sec / 2
+
+    tmp1 = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    tmp1.close()
+    tmp2 = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    tmp2.close()
+
+    progress_args = ["-progress", "pipe:1", "-nostats"]
+    scale_args = ["-vf", "scale=320:-2", "-an", "-q:v", "5"]
+    cmd1 = ["ffmpeg", "-i", video_file, "-t", str(midpoint)] + scale_args + progress_args + [tmp1.name, "-y"]
+    cmd2 = ["ffmpeg", "-ss", str(midpoint), "-i", video_file] + scale_args + progress_args + [tmp2.name, "-y"]
+
+    try:
+        proc1 = subprocess.Popen(cmd1, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        proc2 = subprocess.Popen(cmd2, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except FileNotFoundError:
+        os.unlink(tmp1.name)
+        os.unlink(tmp2.name)
+        raise RuntimeError("ffmpeg not found. Install ffmpeg to use this tool.")
+
+    # Track progress from both processes using threads
+    progress = [0.0, 0.0]
+    duration1_us = midpoint * 1_000_000
+    duration2_us = (video_duration_sec - midpoint) * 1_000_000
+
+    t1 = Thread(target=_read_ffmpeg_progress, args=(proc1, duration1_us, progress, 0))
+    t2 = Thread(target=_read_ffmpeg_progress, args=(proc2, duration2_us, progress, 1))
+    t1.start()
+    t2.start()
+
+    # Display combined progress
+    wall_start = time.monotonic()
+    while t1.is_alive() or t2.is_alive():
+        overall_pct = (progress[0] + progress[1]) / 2
+        now = time.monotonic()
+        wall_elapsed = now - wall_start
+        if overall_pct > 2.0:
+            eta_sec = wall_elapsed / (overall_pct / 100) - wall_elapsed
+            eta_str = f"ETA {format_time(eta_sec)}"
+        else:
+            eta_str = "ETA --:--"
+        bar = build_progress_bar(overall_pct)
+        sys.stdout.write(f"\r {bar}  {overall_pct:5.1f}%   {eta_str}\033[K")
+        sys.stdout.flush()
+        time.sleep(1)
+
+    t1.join()
+    t2.join()
+    proc1.wait()
+    proc2.wait()
+
     sys.stdout.write(f"\r {build_progress_bar(100)}  100.0%\033[K\n")
     sys.stdout.flush()
 
-    if process.returncode != 0:
-        os.unlink(tmp.name)
-        raise RuntimeError(f"ffmpeg failed with exit code {process.returncode}")
+    if proc1.returncode != 0 or proc2.returncode != 0:
+        os.unlink(tmp1.name)
+        os.unlink(tmp2.name)
+        raise RuntimeError(f"ffmpeg failed (exit codes: {proc1.returncode}, {proc2.returncode})")
 
-    return tmp.name
+    # Concatenate the two halves (stream copy, very fast)
+    concat_out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    concat_out.close()
+    filelist = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False)
+    filelist.write(f"file '{tmp1.name}'\n")
+    filelist.write(f"file '{tmp2.name}'\n")
+    filelist.close()
+
+    try:
+        subprocess.run(
+            ["ffmpeg", "-f", "concat", "-safe", "0", "-i", filelist.name, "-c", "copy", concat_out.name, "-y"],
+            check=True, capture_output=True,
+        )
+    except subprocess.CalledProcessError as e:
+        os.unlink(concat_out.name)
+        raise RuntimeError(f"ffmpeg concat failed: {e.stderr.decode()}")
+    finally:
+        os.unlink(tmp1.name)
+        os.unlink(tmp2.name)
+        os.unlink(filelist.name)
+
+    return concat_out.name
 
 
 def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
