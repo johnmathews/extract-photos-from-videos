@@ -75,28 +75,33 @@ def transcode_lowres(video_file, video_duration_sec):
     """
     tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     tmp.close()
-    cmd = ["ffmpeg", "-i", video_file, "-vf", "scale=320:-2", "-an", "-q:v", "5", tmp.name, "-y"]
+    # -progress pipe:1 outputs line-buffered key=value progress to stdout,
+    # which avoids the pipe-buffering issues of ffmpeg's \r-delimited stderr.
+    cmd = [
+        "ffmpeg", "-i", video_file, "-vf", "scale=320:-2", "-an", "-q:v", "5",
+        "-progress", "pipe:1", "-nostats",
+        tmp.name, "-y",
+    ]
 
     try:
-        process = subprocess.Popen(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     except FileNotFoundError:
         os.unlink(tmp.name)
         raise RuntimeError("ffmpeg not found. Install ffmpeg to use this tool.")
 
-    time_pattern = re.compile(r"time=(\d+):(\d+):(\d+)\.(\d+)")
     wall_start = time.monotonic()
     last_update = 0.0
+    duration_us = video_duration_sec * 1_000_000
 
-    # Read stderr character by character to handle ffmpeg's \r-delimited progress
-    buffer = ""
-    for byte in iter(lambda: process.stderr.read(1), b""):
-        char = byte.decode("utf-8", errors="replace")
-        if char in ("\r", "\n"):
-            match = time_pattern.search(buffer)
-            if match and video_duration_sec > 0:
-                h, m, s, cs = match.groups()
-                current_sec = int(h) * 3600 + int(m) * 60 + int(s) + int(cs) / 100
-                pct = min(current_sec / video_duration_sec * 100, 100)
+    for raw_line in process.stdout:
+        line = raw_line.decode("utf-8", errors="replace").strip()
+        if line.startswith("out_time_us="):
+            try:
+                current_us = int(line.split("=", 1)[1])
+            except ValueError:
+                continue
+            if duration_us > 0:
+                pct = min(current_us / duration_us * 100, 100)
                 now = time.monotonic()
                 if now - last_update >= 1.0:
                     wall_elapsed = now - wall_start
@@ -109,9 +114,6 @@ def transcode_lowres(video_file, video_duration_sec):
                     sys.stdout.write(f"\r {bar}  {pct:5.1f}%   {eta_str}\033[K")
                     sys.stdout.flush()
                     last_update = now
-            buffer = ""
-        else:
-            buffer += char
 
     process.wait()
 
