@@ -267,8 +267,9 @@ def extract_photos_from_video(video_file, output_folder, step_time, ssim_thresho
         logger.info(f"Scan complete: found {len(photo_timestamps)} candidate photos")
 
         # Phase 3: Extract full-res frames
-        if photo_timestamps:
-            print(f"[3/3] Extracting {len(photo_timestamps)} photos at full resolution...", flush=True)
+        candidates = len(photo_timestamps)
+        if candidates:
+            print(f"[3/3] Extracting {candidates} candidates at full resolution...", flush=True)
             saved = extract_fullres_frames(video_file, output_folder, photo_timestamps, fps, filename, logger)
         else:
             print("[3/3] No photos found.", flush=True)
@@ -278,4 +279,6 @@ def extract_photos_from_video(video_file, output_folder, step_time, ssim_thresho
         os.unlink(lowres_path)
 
     logger.info(f"Done: {saved} photos saved to {output_folder}")
-    print(f"Extracted {saved} photos to {output_folder}/", flush=True)
+    skipped = candidates - saved if candidates else 0
+    skipped_msg = f" ({skipped} failed validation)" if skipped else ""
+    print(f"Extracted {saved} photos to {output_folder}/{skipped_msg}", flush=True)
