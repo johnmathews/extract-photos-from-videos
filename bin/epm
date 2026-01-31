@@ -108,11 +108,12 @@ SETUP
 echo "Extracting photos from: $VIDEO"
 echo "Output directory: $OUTPUT"
 
-# -tt forces PTY allocation so the remote process gets SIGHUP when the
-# SSH connection drops (e.g. local Ctrl-C).
-# Shell-escape arguments so the remote login shell (which may be zsh) doesn't
-# glob-expand characters like [] in filenames.
-ssh -tt "$SSH_HOST" "bash -l -s -- $(printf '%q ' "$VIDEO" "$OUTPUT" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")" <<'EOF'
+# Upload the extraction script to a temp file on the remote, then execute it
+# with -tt. This avoids the PTY-vs-heredoc conflict where -tt causes the
+# heredoc to be interpreted interactively and child processes consume stdin.
+REMOTE_SCRIPT="/tmp/epm-$$.sh"
+
+ssh "$SSH_HOST" "cat > $REMOTE_SCRIPT" <<'EXTRACTION'
 set -euo pipefail
 
 VIDEO="$1"
@@ -144,19 +145,14 @@ PYTHONUNBUFFERED=1 python extract_photos/main.py "$TMPDIR" "${EXTRA[@]+"${EXTRA[
 
 # Find the video-specific output subdirectory (name is lowercased/sanitised by the tool)
 EXTRACTED_BASE="$TMPDIR/extracted_photos"
-echo "DEBUG: EXTRACTED_BASE=$EXTRACTED_BASE"
-echo "DEBUG: contents of EXTRACTED_BASE:" && ls -la "$EXTRACTED_BASE" 2>&1 || true
 EXTRACTED_DIR="$(find "$EXTRACTED_BASE" -mindepth 1 -maxdepth 1 -type d | head -1)"
-echo "DEBUG: EXTRACTED_DIR=$EXTRACTED_DIR"
 
 if [ -z "$EXTRACTED_DIR" ] || [ ! -d "$EXTRACTED_DIR" ]; then
     echo "No photos extracted."
     exit 0
 fi
 
-echo "DEBUG: contents of EXTRACTED_DIR:" && ls -la "$EXTRACTED_DIR" 2>&1 || true
 PHOTO_COUNT="$(find "$EXTRACTED_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')"
-echo "DEBUG: PHOTO_COUNT=$PHOTO_COUNT"
 if [ "$PHOTO_COUNT" -eq 0 ]; then
     echo "No photos extracted."
     exit 0
@@ -166,6 +162,10 @@ fi
 mkdir -p "$OUTPUT"
 find "$EXTRACTED_DIR" -maxdepth 1 -type f -exec cp {} "$OUTPUT/" \;
 echo "Copied $PHOTO_COUNT photo(s) to $OUTPUT"
-EOF
+EXTRACTION
+
+# Execute with -tt so Ctrl-C kills the remote process. The trap cleans up
+# the temp script regardless of how the extraction exits.
+ssh -tt "$SSH_HOST" "trap 'rm -f $REMOTE_SCRIPT' EXIT; bash -l $REMOTE_SCRIPT $(printf '%q ' "$VIDEO" "$OUTPUT" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")"
 
 echo "Done."
