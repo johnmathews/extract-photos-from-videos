@@ -198,11 +198,30 @@ def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
     return photo_timestamps
 
 
+def _rejection_reason(image):
+    """Return a rejection reason string, or None if the image is valid."""
+    h, w = image.shape[:2]
+    if h < 1000 or w < 1000:
+        return f"too small ({w}x{h})"
+    if len(image.shape) == 2:
+        if np.all(image == image[0, 0]):
+            return "single color"
+    else:
+        if (
+            np.all(image[:, :, 0] == image[0, 0, 0])
+            and np.all(image[:, :, 1] == image[0, 0, 1])
+            and np.all(image[:, :, 2] == image[0, 0, 2])
+        ):
+            return "single color"
+    return None
+
+
 def extract_fullres_frames(video_file, output_folder, photo_timestamps, fps, filename, logger):
     """Extract full-resolution frames at the given timestamps from the original video.
 
     Opens the original video, seeks to each timestamp, decodes the frame,
-    runs trim_and_add_border + is_valid_photo, and saves as JPEG.
+    runs trim_and_add_border + validation, and saves as JPEG. Prints a line
+    per candidate showing the result.
     """
     cap = cv2.VideoCapture(video_file)
     filename_safe = make_safe_folder_name(os.path.splitext(filename)[0])
@@ -213,18 +232,22 @@ def extract_fullres_frames(video_file, output_folder, photo_timestamps, fps, fil
         cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
         ret, frame = cap.read()
         if not ret:
+            print(f"  {time_str}  -- skipped: could not read frame", flush=True)
             logger.warning(f"{time_str}: could not read frame at {timestamp_sec:.1f}s")
             continue
 
         trimmed_frame = trim_and_add_border(frame)
-        if is_valid_photo(trimmed_frame):
+        reason = _rejection_reason(trimmed_frame)
+        if reason is None:
             file_name = f"{filename_safe}_{time_str}.jpg"
             photo_path = os.path.join(output_folder, file_name)
             cv2.imwrite(photo_path, trimmed_frame)
             saved_count += 1
+            print(f"  {time_str}  -- saved", flush=True)
             logger.info(f"{time_str}: saved {file_name}")
         else:
-            logger.info(f"{time_str}: frame failed validation, skipped")
+            print(f"  {time_str}  -- skipped: {reason}", flush=True)
+            logger.info(f"{time_str}: skipped ({reason})")
 
     cap.release()
     return saved_count
