@@ -215,20 +215,22 @@ def extract_photos_from_video(video_file, output_folder, step_time, ssim_thresho
     logger.info(f"fps: {fps}, duration: {format_time(video_duration_sec)}, step_time: {step_time}s")
 
     # Phase 1: Transcode to low-res
-    print("Transcoding to low resolution...")
+    print("[1/3] Transcoding to low resolution...")
     lowres_path = transcode_lowres(video_file)
     logger.info(f"Transcoded to low-res: {lowres_path}")
 
     try:
         # Phase 2: Scan low-res for photo timestamps
+        print("[2/3] Scanning for photos...")
         photo_timestamps = scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec)
         logger.info(f"Scan complete: found {len(photo_timestamps)} candidate photos")
 
         # Phase 3: Extract full-res frames
         if photo_timestamps:
-            print(f"Extracting {len(photo_timestamps)} photos at full resolution...")
+            print(f"[3/3] Extracting {len(photo_timestamps)} photos at full resolution...")
             saved = extract_fullres_frames(video_file, output_folder, photo_timestamps, fps, filename, logger)
         else:
+            print("[3/3] No photos found.")
             saved = 0
     finally:
         # Clean up temp file

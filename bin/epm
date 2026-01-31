@@ -146,12 +146,11 @@ cd "$REPO_DIR"
 source .venv/bin/activate
 python extract_photos/main.py "$TMPDIR" "${EXTRA[@]+"${EXTRA[@]}"}"
 
-# Determine the video-specific output subdirectory
-VIDEO_BASENAME="$(basename "$VIDEO")"
-VIDEO_NAME="${VIDEO_BASENAME%.*}"
-EXTRACTED_DIR="$TMPDIR/extracted_photos/$VIDEO_NAME"
+# Find the video-specific output subdirectory (name is lowercased/sanitised by the tool)
+EXTRACTED_BASE="$TMPDIR/extracted_photos"
+EXTRACTED_DIR="$(find "$EXTRACTED_BASE" -mindepth 1 -maxdepth 1 -type d | head -1)"
 
-if [ ! -d "$EXTRACTED_DIR" ]; then
+if [ -z "$EXTRACTED_DIR" ] || [ ! -d "$EXTRACTED_DIR" ]; then
     echo "No photos extracted."
     exit 0
 fi
