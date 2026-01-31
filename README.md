@@ -10,24 +10,28 @@ at your own pace, in any order, and annotate them.
 ## How it works
 
 1. Point the tool at a directory containing one or more video files.
-2. Each video is split into chunks and processed in parallel using
-   multiprocessing.
-3. Frames are sampled at a configurable interval (default: every 0.5 seconds).
-4. A frame is extracted as a photo when:
+2. Each video goes through a three-phase pipeline:
+   - **Transcode** — ffmpeg creates a 320px-wide low-res copy for fast scanning.
+   - **Scan** — The low-res copy is scanned single-threaded at a configurable
+     interval (default: every 0.5 seconds). Frames with uniform borders are
+     detected and deduplicated using perceptual hashing.
+   - **Extract** — Only the frames identified as photos are decoded from the
+     original full-resolution video, trimmed, validated, and saved.
+3. A frame is extracted as a photo when:
    - It has uniform-color borders on all four sides.
-   - It is sufficiently different from the previous extracted photo (SSIM-based
-     deduplication, default threshold: 0.90).
+   - It is sufficiently different from the previous extracted photo (perceptual
+     hash deduplication).
    - The bordered content is at least 1000x1000 pixels.
-   - The frame is static (the same image is held for several frames).
-5. Borders are trimmed and replaced with a clean border matching the original
+4. Borders are trimmed and replaced with a clean border matching the original
    color.
-6. Output is organized into per-video subdirectories.
+5. Output is organized into per-video subdirectories.
 
 Supported video formats: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`.
 
 ## Setup
 
-Requires Python >= 3.13 and [uv](https://github.com/astral-sh/uv).
+Requires Python >= 3.13, [uv](https://github.com/astral-sh/uv), and
+[ffmpeg](https://ffmpeg.org/).
 
 ```bash
 git clone https://github.com/johnmathews/extract-photos-from-videos.git
@@ -86,14 +90,13 @@ INPUT_DIR/
       video-name_0m30s.jpg
       video-name_2m15s.jpg
       logs/
-        video-name__chunk_0__0m0s_to_5m0s.log
-        video-name__chunk_1__5m0s_to_10m0s.log
+        video-name.log
     another-video/
       ...
 ```
 
 Each photo filename includes the video name and the timestamp where it was
-found. Per-chunk log files record detailed extraction decisions.
+found. A single log file per video records detailed extraction decisions.
 
 ## Testing
 
@@ -110,11 +113,12 @@ pure functions (`make_safe_folder_name`, `is_valid_photo`, `calculate_ssim`,
 `detect_almost_uniform_borders`, `trim_and_add_border`) are where the core
 detection logic lives, and they're fully testable this way.
 
-The untested code (`process_chunk`, `extract_photos_from_video_parallel`,
-`batch_processor`, `main`) is orchestration -- opening video files, looping
-frames, multiprocessing, and file I/O. Testing that with real video files would
-be an integration test: slow, requiring test fixtures, and mostly validating
-that OpenCV works rather than project logic.
+The untested code (`transcode_lowres`, `scan_for_photos`,
+`extract_fullres_frames`, `extract_photos_from_video`, `batch_processor`,
+`main`) is orchestration -- transcoding, scanning, seeking, and file I/O.
+Testing that with real video files would be an integration test: slow, requiring
+test fixtures, and mostly validating that OpenCV and ffmpeg work rather than
+project logic.
 
 ## Remote extraction (`epm`)
 

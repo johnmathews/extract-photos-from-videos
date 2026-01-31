@@ -1,12 +1,16 @@
 import os
 from datetime import datetime
 
-from extract import extract_photos_from_video_parallel
+from extract import extract_photos_from_video
 from utils import make_safe_folder_name
 
 
 def process_videos_in_directory(
-    input_directory: str, output_directory: str, step_time: int, ssim_threshold: float, **kwargs
+    input_directory: str,
+    output_directory: str,
+    step_time: int,
+    ssim_threshold: float,
+    **kwargs,
 ):
     """
     Processes all videos in the specified directory. For each video, it creates a subdirectory
@@ -30,7 +34,7 @@ def process_videos_in_directory(
             video_files.append(filename)
 
     if not video_files:
-        print(f"🛑 Found 0 video files. Stopping.")
+        print("🛑 Found 0 video files. Stopping.")
         return
 
     print(f"\033[93mFound {len(video_files)} videos...\033[0m")
@@ -47,15 +51,19 @@ def process_videos_in_directory(
 
         input_path = os.path.join(input_directory, filename)
 
-        print(f"\n\033[93m{datetime.now().strftime('%H:%M:%S')} Processing video: \033[94m{filename}\033[0m")
+        print(
+            f"\n\033[93m{datetime.now().strftime('%H:%M:%S')} Processing video: \033[94m{filename}\033[0m"
+        )
 
         # Extract photos from the video
-        extract_photos_from_video_parallel(
+        extract_photos_from_video(
             video_file=input_path,
             output_folder=video_output_directory,
             step_time=step_time,
             ssim_threshold=ssim_threshold,
-            filename=filename 
+            filename=filename,
         )
 
-    print(f"{datetime.now().strftime('%H:%M:%S')} ✨ Finished processing {len(video_files)} videos ✨")
+    print(
+        f"{datetime.now().strftime('%H:%M:%S')} ✨ Finished processing {len(video_files)} videos ✨"
+    )

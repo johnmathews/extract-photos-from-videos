@@ -1,55 +1,30 @@
 #!/usr/bin/env python3
 
 import os
-from datetime import timedelta
-from multiprocessing import Manager, Pool
+import subprocess
+import tempfile
+import time
 
 import cv2
 import numpy as np
 from borders import trim_and_add_border
-from display_progress import display_progress
-from utils import calculate_ssim, is_valid_photo, make_safe_folder_name, setup_logger
+from display_progress import format_time, print_scan_progress
+from utils import is_valid_photo, make_safe_folder_name, setup_logger
+
+HASH_SIZE = 8
+HASH_DIFF_THRESHOLD = 10  # hamming distance out of 64 bits
 
 
-def is_frame_static(video_capture, current_frame, frame_offset, ssim_threshold):
-    """
-    Determines if the current frame is part of a still photo or a video segment.
+def compute_frame_hash(frame):
+    """Compute an average perceptual hash of a frame (64-bit boolean array)."""
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if len(frame.shape) == 3 else frame
+    resized = cv2.resize(gray, (HASH_SIZE, HASH_SIZE), interpolation=cv2.INTER_AREA)
+    return resized > resized.mean()
 
-    Parameters:
-        video_capture (cv2.VideoCapture): The video capture object.
-        current_frame (np.array): The current frame to test.
-        frame_offset (int): Number of frames to skip forward for comparison.
-        ssim_threshold (float): SSIM similarity threshold. Frames with SSIM above this are considered identical.
 
-    Returns:
-        bool: True if the frame is part of a photo, False if part of a video.
-    """
-    # Get the current position in the video
-    current_pos = int(video_capture.get(cv2.CAP_PROP_POS_FRAMES))
-
-    # Move forward by the frame offset
-    target_frame_pos = current_pos + frame_offset
-    video_capture.set(cv2.CAP_PROP_POS_FRAMES, target_frame_pos)
-
-    # Read the target frame
-    ret, target_frame = video_capture.read()
-
-    # Restore the position to the current frame
-    video_capture.set(cv2.CAP_PROP_POS_FRAMES, current_pos)
-
-    # If unable to read the target frame, return False (likely end of video)
-    if not ret:
-        return False
-
-    # Calculate SSIM between the current frame and the target frame
-    current_gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
-    target_gray = cv2.cvtColor(target_frame, cv2.COLOR_BGR2GRAY)
-    from skimage.metrics import structural_similarity as ssim
-
-    similarity, _ = ssim(current_gray, target_gray, full=True)
-
-    # Determine if the frames are identical
-    return similarity >= ssim_threshold
+def hash_difference(hash1, hash2):
+    """Hamming distance between two perceptual hashes."""
+    return np.count_nonzero(hash1 != hash2)
 
 
 def detect_almost_uniform_borders(frame, border_width=5, threshold=10):
@@ -89,186 +64,175 @@ def detect_almost_uniform_borders(frame, border_width=5, threshold=10):
     return is_left_uniform and is_right_uniform and is_top_uniform and is_bottom_uniform
 
 
-def process_chunk(
-    video_file,
-    output_folder: str,
-    start_frame: int,
-    end_frame: int,
-    frame_step: float,
-    fps: int,
-    ssim_threshold: float,
-    chunk_id: int,
-    progress_dict: dict,
-    filename: str,
-):
+def transcode_lowres(video_file):
+    """Transcode a video to 320px wide low-res copy for fast scanning.
 
-    filename_safe = make_safe_folder_name(os.path.splitext(filename)[0])
-    log_dir = os.path.join(output_folder, "logs")
-    os.makedirs(log_dir, exist_ok=True)
+    Returns path to the temporary low-res file.
+    Raises RuntimeError if ffmpeg is not found or fails.
+    """
+    tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    tmp.close()
+    try:
+        subprocess.run(
+            ["ffmpeg", "-i", video_file, "-vf", "scale=320:-2", "-an", "-q:v", "5", tmp.name, "-y"],
+            check=True,
+            capture_output=True,
+        )
+    except FileNotFoundError:
+        os.unlink(tmp.name)
+        raise RuntimeError("ffmpeg not found. Install ffmpeg to use this tool.")
+    except subprocess.CalledProcessError as e:
+        os.unlink(tmp.name)
+        raise RuntimeError(f"ffmpeg failed: {e.stderr.decode()}")
+    return tmp.name
 
-    start_minutes, start_seconds = divmod(start_frame / fps, 60)
-    start_time = f"{int(start_minutes)}:{int(start_seconds):02d}"
-    end_minutes, end_seconds = divmod(end_frame / fps, 60)
-    end_time = f"{int(end_minutes)}:{int(end_seconds):02d}"
 
-    log_file = os.path.join(
-        log_dir, f"{filename_safe}__chunk_{chunk_id}__{start_time.replace(':','m')}s_to_{end_time.replace(':','m')}s.log"
-    )
-    logger = setup_logger(log_file)
+def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
+    """Scan the low-res video for frames containing photos.
 
-    logger.info(f"File: {filename_safe}")
-    logger.info(f"Starting chunk {chunk_id}")
-    logger.info(f"Chunk time: {start_time} - {end_time}")
-    logger.info(f"fps: {fps}, frame_step: {frame_step}, step_time: {frame_step / fps}s")
-    logger.info(f"ssim_threshold: {ssim_threshold}")
+    Steps through frames at step_time intervals, detects uniform borders,
+    and deduplicates using perceptual hashing.
 
-    cap = cv2.VideoCapture(video_file)
-    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+    Returns a list of (timestamp_sec, time_str) tuples for each unique photo found.
+    """
+    cap = cv2.VideoCapture(lowres_path)
+    lowres_fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_step = int(lowres_fps * step_time)
+    if frame_step < 1:
+        frame_step = 1
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    prev_frame = None
-    photo_index = 0
-    progress = 0.0
-    total_frames = end_frame - start_frame
-    total_time = timedelta(seconds=int(total_frames / fps))
+    prev_photo_hash = None
+    photo_timestamps = []
+    last_progress_time = 0.0
+    wall_start = time.monotonic()
 
-    start_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
-    # start_time_minutes, start_time_seconds = divmod(start_frame / fps, 60)
-    # start_time = f"{int(start_time_minutes)}-{int(start_time_seconds):02d}"
-    logger.info(f"Analysing from {start_time}")
+    # Print initial 3 blank lines for the progress display
+    print()
+    print()
+    print()
 
     while True:
         current_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
-        current_time_minutes, current_time_seconds = divmod(current_frame / fps, 60)
-        current_time = f"{int(current_time_minutes)}m{int(current_time_seconds):02d}s"
-
-        if current_frame >= end_frame:
+        if current_frame >= total_frames:
             break
 
         ret, frame = cap.read()
-        if not ret:  # End of video
+        if not ret:
             break
 
-        # Check for white borders
-        border_test = detect_almost_uniform_borders(frame)
+        # Map low-res frame position back to original video timestamp
+        timestamp_sec = current_frame / lowres_fps if lowres_fps > 0 else 0
+        minutes, seconds = divmod(int(timestamp_sec), 60)
+        time_str = f"{minutes}m{seconds:02d}s"
 
-        # to avoid extracting the same photograph more than once,
-        # check that this frame is not the same as the previous frame
-        if border_test:
-            if prev_frame is not None:
-                similarity = calculate_ssim(frame, prev_frame)
-                if similarity < ssim_threshold:
-                    trimmed_frame = trim_and_add_border(frame)
-                    if is_valid_photo(trimmed_frame):
-                        is_photo = is_frame_static(cap, frame, frame_offset=5, ssim_threshold=ssim_threshold)
-                        if is_photo:
-                            file_name = f"{filename_safe}_{current_time}.jpg"
-                            photo_path = os.path.join(output_folder, file_name)
-                            cv2.imwrite(photo_path, trimmed_frame)
-                            photo_index += 1
-                            logger.info(f"{current_time}: saved file {file_name}")
+        if detect_almost_uniform_borders(frame):
+            frame_hash = compute_frame_hash(frame)
+            is_new = prev_photo_hash is None or hash_difference(frame_hash, prev_photo_hash) > HASH_DIFF_THRESHOLD
+            if is_new:
+                photo_timestamps.append((timestamp_sec, time_str))
+                prev_photo_hash = frame_hash
 
-        prev_frame = frame
         cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + frame_step)
 
-        # Update progress
-        elapsed_time = timedelta(seconds=int((current_frame - start_frame) / fps))
-        progress = (current_frame - start_frame) / total_frames * 100
-        progress_dict[chunk_id] = {
-            "progress": f"{progress:.2f}%",
-            "time": f"{elapsed_time}/{total_time}",
-            "frames": f"{current_frame}/{total_frames}",
-            "photos": photo_index,
-            "current_time": current_time,
-        }
+        # Update progress display every 5 seconds
+        now = time.monotonic()
+        if now - last_progress_time >= 5.0:
+            last_progress_time = now
+            pct = current_frame / total_frames * 100 if total_frames > 0 else 0
+            wall_elapsed = now - wall_start
+            if pct > 2.0:
+                eta_sec = wall_elapsed / (pct / 100) - wall_elapsed
+                eta_str = f"ETA {format_time(eta_sec)}"
+            else:
+                eta_str = "ETA --:--"
+            print_scan_progress(filename, pct, timestamp_sec, video_duration_sec, len(photo_timestamps), eta_str)
 
-    logger.info(f"Progress: {progress:.2f}% | Photos: {photo_index}")
-
-    # Mark chunk as complete
-    progress_dict[chunk_id] = {
-        "progress": "100.00%",
-        "time": f"{total_time}/{total_time}",
-        "frames": f"{total_frames}/{total_frames}",
-        "photos": photo_index,
-        "current_time": current_time,
-    }
-
-    # Log completion
-    logger.info(f"Analysed until {current_time}")
-    logger.info(f"Chunk {chunk_id} completed: {photo_index} photos extracted.")
     cap.release()
-    return photo_index
+
+    # Final progress update
+    print_scan_progress(filename, 100.0, video_duration_sec, video_duration_sec, len(photo_timestamps), "")
+    print()
+
+    return photo_timestamps
 
 
-def extract_photos_from_video_parallel(
-    video_file,
-    output_folder: str,
-    step_time: float,
-    ssim_threshold: float,
-    filename: int,
-):
+def extract_fullres_frames(video_file, output_folder, photo_timestamps, fps, filename, logger):
+    """Extract full-resolution frames at the given timestamps from the original video.
+
+    Opens the original video, seeks to each timestamp, decodes the frame,
+    runs trim_and_add_border + is_valid_photo, and saves as JPEG.
     """
-    checks frames of a video to see if the frame contains a photograph.
-    a photograph is identified by having a solid color border around it.
-    the photo must be larger than a minimum size.
+    cap = cv2.VideoCapture(video_file)
+    filename_safe = make_safe_folder_name(os.path.splitext(filename)[0])
+    saved_count = 0
 
-    extracted_photos: will contain a subdirectory for each video. each subdirectory contains the photographs extracted from
-        the video.
-    step_time: amount of time in seconds between each step.
-    ssim_threshold: if a frame has a similarity higher than ssim_threshold it will be considered the same as the previous
-        frame and will not be extracted again.
+    for timestamp_sec, time_str in photo_timestamps:
+        target_frame = int(timestamp_sec * fps)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+        ret, frame = cap.read()
+        if not ret:
+            logger.warning(f"{time_str}: could not read frame at {timestamp_sec:.1f}s")
+            continue
+
+        trimmed_frame = trim_and_add_border(frame)
+        if is_valid_photo(trimmed_frame):
+            file_name = f"{filename_safe}_{time_str}.jpg"
+            photo_path = os.path.join(output_folder, file_name)
+            cv2.imwrite(photo_path, trimmed_frame)
+            saved_count += 1
+            logger.info(f"{time_str}: saved {file_name}")
+        else:
+            logger.info(f"{time_str}: frame failed validation, skipped")
+
+    cap.release()
+    return saved_count
+
+
+def extract_photos_from_video(video_file, output_folder, step_time, ssim_threshold, filename):
+    """Extract photos from a video using a three-phase pipeline:
+    1. Transcode to low-res temp file
+    2. Scan low-res for photo timestamps
+    3. Extract full-res frames at those timestamps
     """
     os.makedirs(output_folder, exist_ok=True)
 
-    # Load video
+    # Set up logging
+    filename_safe = make_safe_folder_name(os.path.splitext(filename)[0])
+    log_dir = os.path.join(output_folder, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, f"{filename_safe}.log")
+    logger = setup_logger(log_file)
+
+    # Get video metadata
     cap = cv2.VideoCapture(video_file)
     fps = int(cap.get(cv2.CAP_PROP_FPS))
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    frame_step = fps * step_time  # number of frames to jump each time
+    video_duration_sec = frame_count / fps if fps > 0 else 0
     cap.release()
 
-    # Determine the number of chunks
-    num_cores = os.cpu_count() or 1
-    num_chunks = max(1, num_cores // 4)  # div by more than 4 makes laptop unusably slow. 4 seems a good balance.
-    chunk_size = frame_count // num_chunks
-    chunks = [(i * chunk_size, (i + 1) * chunk_size) for i in range(num_chunks)]
-    chunks[-1] = (chunks[-1][0], frame_count)  # Ensure the last chunk includes all remaining frames
+    logger.info(f"File: {filename}")
+    logger.info(f"fps: {fps}, duration: {format_time(video_duration_sec)}, step_time: {step_time}s")
 
-    # Shared progress dictionary
-    with Manager() as manager:
+    # Phase 1: Transcode to low-res
+    print("Transcoding to low resolution...")
+    lowres_path = transcode_lowres(video_file)
+    logger.info(f"Transcoded to low-res: {lowres_path}")
 
-        # this is the first version of progress_dict that you see, and can leave artifiacts on the console.
-        progress_dict = manager.dict(
-            {
-                i: {
-                    "progress": "0.00%",
-                    "time": "0:00:00/0:00:00",
-                    "frames": "0/0",
-                    "photos": 0,
-                    "current_time": "00:00",
-                }
-                for i in range(num_chunks)
-            }
-        )
+    try:
+        # Phase 2: Scan low-res for photo timestamps
+        photo_timestamps = scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec)
+        logger.info(f"Scan complete: found {len(photo_timestamps)} candidate photos")
 
-        # Prepare arguments for multiprocessing
-        args = [
-            (video_file, output_folder, start, end, frame_step, fps, ssim_threshold, i, progress_dict, filename)
-            for i, (start, end) in enumerate(chunks)
-        ]
+        # Phase 3: Extract full-res frames
+        if photo_timestamps:
+            print(f"Extracting {len(photo_timestamps)} photos at full resolution...")
+            saved = extract_fullres_frames(video_file, output_folder, photo_timestamps, fps, filename, logger)
+        else:
+            saved = 0
+    finally:
+        # Clean up temp file
+        os.unlink(lowres_path)
 
-        # Start multiprocessing
-        with Pool(num_chunks) as pool:
-            # Launch a background thread to display progress
-            from threading import Thread
-
-            progress_thread = Thread(target=display_progress, args=(progress_dict, num_chunks))
-            progress_thread.start()
-
-            # Run the chunk processing
-            results = pool.starmap(process_chunk, args)
-
-            # Wait for progress display to finish
-            progress_thread.join()
-
-    total_photos = sum(results)
-    print(f"✅  Extracted {total_photos} photos to {output_folder}/")
+    logger.info(f"Done: {saved} photos saved to {output_folder}")
+    print(f"Extracted {saved} photos to {output_folder}/")

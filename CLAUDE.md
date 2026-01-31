@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project does
 
-Extracts still photographs (with solid-color borders) from video files. Designed for studying photographers' work shown in YouTube videos. The tool processes videos in parallel, detects frames showing bordered photos, deduplicates using SSIM, and saves them as JPEGs.
+Extracts still photographs (with solid-color borders) from video files. Designed for studying photographers' work shown in YouTube videos. The tool transcodes each video to low resolution, scans for photo frames, then extracts full-res frames at discovered timestamps. Deduplicates using perceptual hashing and saves as JPEGs.
 
 ## Commands
 
@@ -33,25 +33,31 @@ pyinstaller main.spec
 
 ## Architecture
 
-**Processing pipeline:** `main.py` (CLI) -> `batch_processor.py` (discover videos, iterate) -> `extract.py` (parallel chunk processing via `multiprocessing.Pool`)
+**Processing pipeline:** `main.py` (CLI) -> `batch_processor.py` (discover videos, iterate) -> `extract.py` (three-phase: transcode, scan, extract)
+
+Each video goes through three phases:
+1. **Transcode** — ffmpeg creates a 320px-wide low-res temp copy (no audio).
+2. **Scan** — Single-threaded scan of the low-res copy. Steps through frames at `step_time` intervals, detects uniform borders, deduplicates via perceptual hashing. Collects timestamps of unique photos.
+3. **Extract** — Opens the original full-res video, seeks to each discovered timestamp, runs border trimming and validation, saves as JPEG.
 
 Key modules in `extract_photos/`:
+
 - **main.py** - Entry point. Parses args (`input_directory`, `-o`, `-s`, `-t`), creates output dir, calls batch processor.
-- **batch_processor.py** - Scans directory for video files (.mp4/.mkv/.avi/.mov/.webm), creates per-video output subdirectories, calls parallel extractor for each.
-- **extract.py** - Core logic. Divides video into chunks (cpu_count // 4), processes in parallel. Each chunk: samples frames at `step_time` intervals, detects uniform borders, compares via SSIM, validates dimensions (1000x1000 min), saves photos.
+- **batch_processor.py** - Scans directory for video files (.mp4/.mkv/.avi/.mov/.webm), creates per-video output subdirectories, calls extractor for each.
+- **extract.py** - Core logic. `transcode_lowres()` creates the low-res temp file via ffmpeg. `scan_for_photos()` scans it single-threaded with progress display. `extract_fullres_frames()` seeks to each timestamp in the original video. `extract_photos_from_video()` orchestrates all three phases.
 - **borders.py** - `trim_and_add_border()`: detects border color from top-left region, crops original borders, adds new 5% border.
-- **utils.py** - SSIM calculation (via scikit-image), photo validation, safe folder names, per-chunk logging.
-- **display_progress.py** - Real-time terminal progress display using ANSI escape codes, updated per-chunk.
+- **utils.py** - SSIM calculation (via scikit-image), photo validation, safe folder names, logging.
+- **display_progress.py** - `format_time()`, `build_progress_bar()`, and `print_scan_progress()` for 3-line in-place terminal progress.
 
 **bin/epm** - Bash wrapper that SSHes into `media` VM to run the tool on a single video. Auto-installs repo/deps on first run and auto-updates (`git pull` + `uv sync`) on subsequent runs. Arguments with special shell characters (e.g. `[]` in filenames) must be quoted. Creates a temp dir with a symlink to bridge single-file input to the tool's directory-based interface.
 
 ## Output structure
 
-The tool creates `extracted_photos/` inside the input directory, with subdirectories per video. Photos are named with video name + timestamp. Each video subdirectory also has a `logs/` folder with per-chunk log files.
+The tool creates `extracted_photos/` inside the input directory, with subdirectories per video. Photos are named with video name + timestamp. Each video subdirectory also has a `logs/` folder with a single log file per video.
 
 ## Dependencies
 
-Requires Python >=3.13. Uses `uv` for dependency management. Key libraries: opencv-python (video/image I/O), scikit-image (SSIM), numpy.
+Requires Python >=3.13 and ffmpeg (for low-res transcoding). Uses `uv` for dependency management. Key libraries: opencv-python (video/image I/O), scikit-image (SSIM), numpy.
 
 ## Code style
 

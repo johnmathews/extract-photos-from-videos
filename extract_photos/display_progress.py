@@ -1,49 +1,40 @@
-from time import sleep
+import sys
 
 
-def display_progress(progress_dict, num_chunks):
+def format_time(seconds):
+    """Format seconds as M:SS or H:MM:SS."""
+    seconds = int(seconds)
+    if seconds < 0:
+        seconds = 0
+    if seconds >= 3600:
+        h, remainder = divmod(seconds, 3600)
+        m, s = divmod(remainder, 60)
+        return f"{h}:{m:02d}:{s:02d}"
+    else:
+        m, s = divmod(seconds, 60)
+        return f"{m}:{s:02d}"
+
+
+def build_progress_bar(pct, width=30):
+    """Build an ASCII progress bar like [===========-------------------]."""
+    filled = int(pct / 100 * width)
+    filled = min(filled, width)
+    return "[" + "=" * filled + "-" * (width - filled) + "]"
+
+
+def print_scan_progress(filename, pct, video_pos_sec, video_duration_sec, photo_count, eta_str):
     """
-    Displays progress for each chunk on the console, updating in-place.
+    Print a 3-line in-place progress display for the scanning phase.
+
+    Line 1: Video filename (bold)
+    Line 2: ASCII progress bar + overall percentage + ETA
+    Line 3: Video position / duration + total photos found
     """
-    import sys
+    bar = build_progress_bar(pct)
+    pos_str = f"{format_time(video_pos_sec)} / {format_time(video_duration_sec)}"
 
-    # Print initial placeholders for each chunk
-    for i in range(num_chunks):
-        print(f"Chunk {i}: Initializing...")
-
-    while True:
-        # Move the cursor up by the number of chunks
-        sys.stdout.write(f"\033[{num_chunks}A")  # Move up `num_chunks` lines
-
-        # Print the progress for each chunk
-        for i in range(num_chunks):
-
-            if i % 2 == 0:  # i is even
-                color_code = 32
-            else:  # i is odd
-                color_code = 32
-
-            progress = progress_dict.get(
-                i,
-                {
-                    "progress": "0.00%",
-                    "time": "0:00:00/0:00:00",
-                    "frames": "0/0",
-                    "photos": 0,
-                    "current_time": "0:00",
-                },
-            )
-
-            print(
-                f"\033[{color_code}mChunk {i}: Photos: {progress['photos']} | {progress['progress']} | {progress['time']} | {progress['current_time']} \033[0m"
-            )
-
-        # Check if all chunks are complete
-        if all(progress_dict.get(i, {}).get("progress") == "100.00%" for i in range(num_chunks)):
-            break
-
-        # Add a small delay for smoother updates
-        sleep(1)
-
-    # Print a newline after all progress is complete
-    print()
+    sys.stdout.write(f"\033[3A")
+    sys.stdout.write(f"\033[K\033[1m{filename}\033[0m\n")
+    sys.stdout.write(f"\033[K {bar}  {pct:5.1f}%   {eta_str}\n")
+    sys.stdout.write(f"\033[K {pos_str:28s}{photo_count} photos\n")
+    sys.stdout.flush()
