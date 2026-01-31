@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 
 import os
+import re
 import subprocess
+import sys
 import tempfile
 import time
 
 import cv2
 import numpy as np
 from borders import trim_and_add_border
-from display_progress import format_time, print_scan_progress
+from display_progress import build_progress_bar, format_time, print_scan_progress
 from utils import is_valid_photo, make_safe_folder_name, setup_logger
 
 HASH_SIZE = 8
@@ -64,26 +66,63 @@ def detect_almost_uniform_borders(frame, border_width=5, threshold=10):
     return is_left_uniform and is_right_uniform and is_top_uniform and is_bottom_uniform
 
 
-def transcode_lowres(video_file):
+def transcode_lowres(video_file, video_duration_sec):
     """Transcode a video to 320px wide low-res copy for fast scanning.
 
+    Shows a single-line progress bar during transcoding.
     Returns path to the temporary low-res file.
     Raises RuntimeError if ffmpeg is not found or fails.
     """
     tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     tmp.close()
+    cmd = ["ffmpeg", "-i", video_file, "-vf", "scale=320:-2", "-an", "-q:v", "5", tmp.name, "-y"]
+
     try:
-        subprocess.run(
-            ["ffmpeg", "-i", video_file, "-vf", "scale=320:-2", "-an", "-q:v", "5", tmp.name, "-y"],
-            check=True,
-            capture_output=True,
-        )
+        process = subprocess.Popen(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL)
     except FileNotFoundError:
         os.unlink(tmp.name)
         raise RuntimeError("ffmpeg not found. Install ffmpeg to use this tool.")
-    except subprocess.CalledProcessError as e:
+
+    time_pattern = re.compile(r"time=(\d+):(\d+):(\d+)\.(\d+)")
+    wall_start = time.monotonic()
+    last_update = 0.0
+
+    # Read stderr character by character to handle ffmpeg's \r-delimited progress
+    buffer = ""
+    for byte in iter(lambda: process.stderr.read(1), b""):
+        char = byte.decode("utf-8", errors="replace")
+        if char in ("\r", "\n"):
+            match = time_pattern.search(buffer)
+            if match and video_duration_sec > 0:
+                h, m, s, cs = match.groups()
+                current_sec = int(h) * 3600 + int(m) * 60 + int(s) + int(cs) / 100
+                pct = min(current_sec / video_duration_sec * 100, 100)
+                now = time.monotonic()
+                if now - last_update >= 1.0:
+                    wall_elapsed = now - wall_start
+                    if pct > 2.0:
+                        eta_sec = wall_elapsed / (pct / 100) - wall_elapsed
+                        eta_str = f"ETA {format_time(eta_sec)}"
+                    else:
+                        eta_str = "ETA --:--"
+                    bar = build_progress_bar(pct)
+                    sys.stdout.write(f"\r {bar}  {pct:5.1f}%   {eta_str}\033[K")
+                    sys.stdout.flush()
+                    last_update = now
+            buffer = ""
+        else:
+            buffer += char
+
+    process.wait()
+
+    # Show completed bar, then move to next line
+    sys.stdout.write(f"\r {build_progress_bar(100)}  100.0%\033[K\n")
+    sys.stdout.flush()
+
+    if process.returncode != 0:
         os.unlink(tmp.name)
-        raise RuntimeError(f"ffmpeg failed: {e.stderr.decode()}")
+        raise RuntimeError(f"ffmpeg failed with exit code {process.returncode}")
+
     return tmp.name
 
 
@@ -216,7 +255,7 @@ def extract_photos_from_video(video_file, output_folder, step_time, ssim_thresho
 
     # Phase 1: Transcode to low-res
     print("[1/3] Transcoding to low resolution...", flush=True)
-    lowres_path = transcode_lowres(video_file)
+    lowres_path = transcode_lowres(video_file, video_duration_sec)
     logger.info(f"Transcoded to low-res: {lowres_path}")
 
     try:
