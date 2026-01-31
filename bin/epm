@@ -155,9 +155,9 @@ if [ "$PHOTO_COUNT" -eq 0 ]; then
     exit 0
 fi
 
-# Copy extracted photos to output directory
+# Copy extracted photos (files only, skip logs/ subdirectory) to output directory
 mkdir -p "$OUTPUT"
-cp "$EXTRACTED_DIR"/* "$OUTPUT/"
+find "$EXTRACTED_DIR" -maxdepth 1 -type f -exec cp {} "$OUTPUT/" \;
 echo "Copied $PHOTO_COUNT photo(s) to $OUTPUT"
 EOF
 
