@@ -158,10 +158,13 @@ if [ "$PHOTO_COUNT" -eq 0 ]; then
     exit 0
 fi
 
-# Copy extracted photos (files only, skip logs/ subdirectory) to output directory
-mkdir -p "$OUTPUT"
-find "$EXTRACTED_DIR" -maxdepth 1 -type f -exec cp {} "$OUTPUT/" \;
-echo "Copied $PHOTO_COUNT photo(s) to $OUTPUT"
+# Copy extracted photos (files only, skip logs/ subdirectory) to a
+# subdirectory of OUTPUT named after the video.
+VIDEO_SUBDIR="$(basename "$EXTRACTED_DIR")"
+FINAL_OUTPUT="$OUTPUT/$VIDEO_SUBDIR"
+mkdir -p "$FINAL_OUTPUT"
+find "$EXTRACTED_DIR" -maxdepth 1 -type f -exec cp {} "$FINAL_OUTPUT/" \;
+echo "Copied $PHOTO_COUNT photo(s) to $FINAL_OUTPUT"
 EXTRACTION
 
 # Execute with -tt so Ctrl-C kills the remote process. The trap cleans up
