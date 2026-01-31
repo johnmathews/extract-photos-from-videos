@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime
 from threading import Thread
 
 import cv2
@@ -16,6 +17,11 @@ from utils import is_valid_photo, make_safe_folder_name, setup_logger
 
 HASH_SIZE = 8
 HASH_DIFF_THRESHOLD = 10  # hamming distance out of 64 bits
+
+
+def _ts():
+    """Return current wall-clock time as HH:MM:SS string."""
+    return datetime.now().strftime("%H:%M:%S")
 
 
 def compute_frame_hash(frame):
@@ -139,7 +145,8 @@ def transcode_lowres(video_file, video_duration_sec):
     proc1.wait()
     proc2.wait()
 
-    sys.stdout.write(f"\r {build_progress_bar(100)}  100.0%\033[K\n")
+    elapsed = format_time(time.monotonic() - wall_start)
+    sys.stdout.write(f"\r {build_progress_bar(100)}  100.0%   took {elapsed}\033[K\n")
     sys.stdout.flush()
 
     if proc1.returncode != 0 or proc2.returncode != 0:
@@ -234,8 +241,9 @@ def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
 
     cap.release()
 
-    # Final progress update
-    print_scan_progress(filename, 100.0, video_duration_sec, video_duration_sec, len(photo_timestamps), "")
+    # Final progress update with elapsed time
+    elapsed = format_time(time.monotonic() - wall_start)
+    print_scan_progress(filename, 100.0, video_duration_sec, video_duration_sec, len(photo_timestamps), f"took {elapsed}")
     print()
 
     return photo_timestamps
@@ -322,24 +330,27 @@ def extract_photos_from_video(video_file, output_folder, step_time, ssim_thresho
     logger.info(f"fps: {fps}, duration: {format_time(video_duration_sec)}, step_time: {step_time}s")
 
     # Phase 1: Transcode to low-res
-    print("[1/3] Transcoding to low resolution...", flush=True)
+    print(f"{_ts()} [1/3] Transcoding to low resolution...", flush=True)
     lowres_path = transcode_lowres(video_file, video_duration_sec)
     logger.info(f"Transcoded to low-res: {lowres_path}")
 
     try:
         # Phase 2: Scan low-res for photo timestamps
-        print("[2/3] Scanning for photos...", flush=True)
+        print(f"{_ts()} [2/3] Scanning for photos...", flush=True)
         photo_timestamps = scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec)
         logger.info(f"Scan complete: found {len(photo_timestamps)} candidate photos")
 
         # Phase 3: Extract full-res frames
         candidates = len(photo_timestamps)
         if candidates:
-            print(f"[3/3] Extracting {candidates} candidates at full resolution...", flush=True)
+            print(f"{_ts()} [3/3] Extracting {candidates} candidates at full resolution...", flush=True)
+            extract_start = time.monotonic()
             saved = extract_fullres_frames(video_file, output_folder, photo_timestamps, fps, filename, logger)
+            extract_elapsed = format_time(time.monotonic() - extract_start)
         else:
-            print("[3/3] No photos found.", flush=True)
+            print(f"{_ts()} [3/3] No photos found.", flush=True)
             saved = 0
+            extract_elapsed = "0:00"
     finally:
         # Clean up temp file
         os.unlink(lowres_path)
@@ -347,4 +358,4 @@ def extract_photos_from_video(video_file, output_folder, step_time, ssim_thresho
     logger.info(f"Done: {saved} photos saved to {output_folder}")
     skipped = candidates - saved if candidates else 0
     skipped_msg = f" ({skipped} failed validation)" if skipped else ""
-    print(f"Extracted {saved} photos to {output_folder}/{skipped_msg}", flush=True)
+    print(f"{_ts()} Extracted {saved} photos to {output_folder}/{skipped_msg}  took {extract_elapsed}", flush=True)
