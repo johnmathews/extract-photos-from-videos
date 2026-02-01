@@ -228,9 +228,9 @@ def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
 
         cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + frame_step)
 
-        # Update progress display every 5 seconds
+        # Update progress display every second
         now = time.monotonic()
-        if now - last_progress_time >= 5.0:
+        if now - last_progress_time >= 1.0:
             last_progress_time = now
             pct = current_frame / total_frames * 100 if total_frames > 0 else 0
             wall_elapsed = now - wall_start
