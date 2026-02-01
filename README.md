@@ -102,17 +102,20 @@ found. A single log file per video records detailed extraction decisions.
 ## Testing
 
 ```bash
-# Python unit tests (utils, borders, border detection)
+# Python unit tests (utils, borders, border detection, Immich integration)
 uv run pytest tests/ -v
 
 # Shell tests for bin/epm argument parsing
 bash tests/test_epm.sh
 ```
 
-The Python tests use synthetic numpy arrays rather than real video files. The
-pure functions (`make_safe_folder_name`, `is_valid_photo`, `calculate_ssim`,
+The Python tests use synthetic numpy arrays for image-processing logic, and
+mocked HTTP responses for the Immich integration. The tested pure functions
+(`make_safe_folder_name`, `is_valid_photo`, `calculate_ssim`,
 `detect_almost_uniform_borders`, `trim_and_add_border`) are where the core
-detection logic lives, and they're fully testable this way.
+detection logic lives. The Immich module (`immich.py`) is tested at 92%
+coverage, covering the HTTP wrapper, polling, album creation, asset addition,
+user lookup, sharing, and the CLI orchestration.
 
 The untested code (`transcode_lowres`, `scan_for_photos`,
 `extract_fullres_frames`, `extract_photos_from_video`, `batch_processor`,
@@ -160,6 +163,7 @@ epm input_file=VIDEO output_dir=DIR [options]
 | `step_time=SECONDS`    | `0.5`   | Seconds between sampled frames                            |
 | `ssim_threshold=FLOAT` | `0.90`  | SSIM threshold for deduplication (0-1, higher = stricter) |
 | `border_px=INT`        | `5`     | Border size in pixels to add around extracted photos      |
+| `update_immich=BOOL`   | `true`  | Run Immich integration (rescan, album creation, sharing)  |
 | `help`                 |         | Show usage                                                |
 
 ### Example Commands
@@ -174,16 +178,27 @@ epm input_file="/data/videos/video-[abc123].mkv" output_dir=/data/photos
 
 ### Immich integration
 
-After extracting photos, `epm` can automatically trigger an
-[Immich](https://immich.app/) external library rescan so new photos appear
-immediately. Set these environment variables on the media VM (e.g. in
-`~/.bashrc`):
+After extracting photos, `epm` can automatically create an
+[Immich](https://immich.app/) album containing the new photos. Set these
+environment variables on the media VM (e.g. in `~/.bashrc`):
 
 | Variable           | Required | Description                                            |
 | ------------------ | -------- | ------------------------------------------------------ |
 | `IMMICH_API_KEY`   | Yes      | API key (create in Immich under Account Settings)      |
 | `IMMICH_LIBRARY_ID`| Yes      | External library ID to rescan                          |
 | `IMMICH_API_URL`   | Yes      | Immich server URL (e.g. `http://localhost:2283`)       |
+| `IMMICH_SHARE_USER`| No       | Immich username to share created albums with           |
 
-If all three variables are set, the rescan is triggered automatically after
-photos are copied. If any are unset, the step is skipped silently.
+If all three required variables are set and the output directory is the
+default (`/mnt/nfs/photos/reference`), `epm` will:
+
+1. Trigger a library rescan so Immich indexes the new files.
+2. Wait for the new assets to appear (polls every 5s, up to 5 minutes).
+3. Parse the video filename into an album name (e.g.
+   `Willem Verbeeck - Shooting Los Angeles on 8x10 Film`).
+4. Create a shared album (or reuse an existing one with the same name).
+5. Add the new assets to the album.
+6. If `IMMICH_SHARE_USER` is set, share the album with that user as an editor.
+
+If any required variables are unset, the reason is shown in the output. To
+disable the integration entirely, pass `update_immich=false`.

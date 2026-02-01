@@ -18,12 +18,14 @@ Options:
   step_time=SECONDS        Time between sampled frames (default: 0.5)
   ssim_threshold=FLOAT     SSIM similarity threshold (default: 0.90)
   border_px=INT            Border size in pixels around extracted photos (default: 5)
+  update_immich=BOOL       Run Immich integration after extraction (default: true)
   help                     Show this help message
 
 Environment variables (set on the media VM):
-  IMMICH_API_KEY         Immich API key (enables library rescan after extraction)
-  IMMICH_LIBRARY_ID      Immich external library ID to rescan
+  IMMICH_API_KEY         Immich API key (required for Immich integration)
+  IMMICH_LIBRARY_ID      Immich external library ID to scan
   IMMICH_API_URL         Immich server URL (e.g. http://localhost:2283)
+  IMMICH_SHARE_USER      Immich username to share albums with (optional)
 
 Prerequisites:
   ssh media must be configured and working.
@@ -39,6 +41,7 @@ USAGE
 # --- Parse arguments ---
 VIDEO=""
 OUTPUT="/mnt/nfs/photos/reference"
+UPDATE_IMMICH="true"
 EXTRA_ARGS=()
 
 for arg in "$@"; do
@@ -61,6 +64,9 @@ for arg in "$@"; do
     ;;
   border_px=*)
     EXTRA_ARGS+=("-b" "${arg#border_px=}")
+    ;;
+  update_immich=*)
+    UPDATE_IMMICH="${arg#update_immich=}"
     ;;
   *)
     echo "Error: unknown argument '$arg'" >&2
@@ -129,7 +135,8 @@ set -euo pipefail
 
 VIDEO="$1"
 OUTPUT="$2"
-shift 2
+UPDATE_IMMICH="$3"
+shift 3
 
 # Remaining args are extra flags for main.py
 EXTRA=("$@")
@@ -181,31 +188,36 @@ echo "Copied $PHOTO_COUNT photo(s) to $FINAL_OUTPUT"
 cp "$(realpath "$VIDEO")" "$FINAL_OUTPUT/"
 echo "Copied video to $FINAL_OUTPUT/$(basename "$VIDEO")"
 
-# Trigger Immich library rescan if configured
-# Set IMMICH_API_KEY, IMMICH_LIBRARY_ID, and IMMICH_API_URL in the remote
-# shell profile (e.g. ~/.bashrc). If any are unset, this step is skipped.
-MISSING_VARS=()
-[ -z "${IMMICH_API_KEY:-}" ] && MISSING_VARS+=(IMMICH_API_KEY)
-[ -z "${IMMICH_LIBRARY_ID:-}" ] && MISSING_VARS+=(IMMICH_LIBRARY_ID)
-[ -z "${IMMICH_API_URL:-}" ] && MISSING_VARS+=(IMMICH_API_URL)
-
-if [ ${#MISSING_VARS[@]} -eq 0 ]; then
-    echo "Triggering Immich library rescan..."
-    HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
-        -X POST "${IMMICH_API_URL}/api/libraries/${IMMICH_LIBRARY_ID}/scan" \
-        -H "x-api-key: ${IMMICH_API_KEY}")"
-    if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-        echo "Immich library rescan triggered (HTTP $HTTP_CODE)"
-    else
-        echo "Warning: Immich rescan failed (HTTP $HTTP_CODE)" >&2
-    fi
+# Immich integration: scan library, create album, add assets, share
+if [ "$OUTPUT" != "/mnt/nfs/photos/reference" ]; then
+    echo "Skipping Immich integration (output is not /mnt/nfs/photos/reference)"
+elif [ "$UPDATE_IMMICH" != "true" ]; then
+    echo "Skipping Immich integration (update_immich=false)"
 else
-    echo "Skipping Immich library rescan (missing env vars: ${MISSING_VARS[*]})"
+    MISSING_VARS=()
+    [ -z "${IMMICH_API_KEY:-}" ] && MISSING_VARS+=(IMMICH_API_KEY)
+    [ -z "${IMMICH_LIBRARY_ID:-}" ] && MISSING_VARS+=(IMMICH_LIBRARY_ID)
+    [ -z "${IMMICH_API_URL:-}" ] && MISSING_VARS+=(IMMICH_API_URL)
+
+    if [ ${#MISSING_VARS[@]} -gt 0 ]; then
+        echo "Skipping Immich integration (missing env vars: ${MISSING_VARS[*]})"
+    else
+        IMMICH_ARGS=(
+            --api-url "$IMMICH_API_URL"
+            --api-key "$IMMICH_API_KEY"
+            --library-id "$IMMICH_LIBRARY_ID"
+            --asset-path "$FINAL_OUTPUT"
+            --video-filename "$(basename "$VIDEO")"
+        )
+        [ -n "${IMMICH_SHARE_USER:-}" ] && IMMICH_ARGS+=(--share-user "$IMMICH_SHARE_USER")
+
+        python extract_photos/immich.py "${IMMICH_ARGS[@]}"
+    fi
 fi
 EXTRACTION
 
 # Execute with -tt so Ctrl-C kills the remote process. The trap cleans up
 # the temp script regardless of how the extraction exits.
-ssh -tt "$SSH_HOST" "trap 'rm -f $REMOTE_SCRIPT' EXIT; bash -l $REMOTE_SCRIPT $(printf '%q ' "$VIDEO" "$OUTPUT" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")"
+ssh -tt "$SSH_HOST" "trap 'rm -f $REMOTE_SCRIPT' EXIT; bash -l $REMOTE_SCRIPT $(printf '%q ' "$VIDEO" "$OUTPUT" "$UPDATE_IMMICH" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")"
 
 echo "Done."
