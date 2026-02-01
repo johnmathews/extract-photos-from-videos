@@ -57,7 +57,7 @@ def trim_and_add_border(image, border_px=5, uniformity_threshold=10):
             break
 
     # Sample border color from the original border region (top-left corner)
-    border_sample = image[:max(top, 1), :max(left, 1)]
+    border_sample = image[: max(top, 1), : max(left, 1)]
 
     # Crop to content
     cropped = image[top : bottom + 1, left : right + 1]
@@ -66,14 +66,24 @@ def trim_and_add_border(image, border_px=5, uniformity_threshold=10):
     if len(image.shape) == 2:
         border_color = int(np.mean(border_sample))
         result = cv2.copyMakeBorder(
-            cropped, border_px, border_px, border_px, border_px,
-            borderType=cv2.BORDER_CONSTANT, value=border_color,
+            cropped,
+            border_px,
+            border_px,
+            border_px,
+            border_px,
+            borderType=cv2.BORDER_CONSTANT,
+            value=border_color,
         )
     else:
         border_color = [int(c) for c in np.mean(border_sample, axis=(0, 1))]
         result = cv2.copyMakeBorder(
-            cropped, border_px, border_px, border_px, border_px,
-            borderType=cv2.BORDER_CONSTANT, value=border_color,
+            cropped,
+            border_px,
+            border_px,
+            border_px,
+            border_px,
+            borderType=cv2.BORDER_CONSTANT,
+            value=border_color,
         )
 
     return result

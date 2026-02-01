@@ -11,7 +11,9 @@ import urllib.request
 from pathlib import Path
 
 
-def immich_request(url: str, api_key: str, method: str = "GET", data: dict | None = None) -> dict | list | None:
+def immich_request(
+    url: str, api_key: str, method: str = "GET", data: dict | None = None
+) -> dict | list | None:
     """Make an authenticated request to the Immich API."""
     body = json.dumps(data).encode() if data is not None else None
     req = urllib.request.Request(url, data=body, method=method)
@@ -31,13 +33,21 @@ def trigger_scan(api_url: str, api_key: str, library_id: str) -> None:
     immich_request(url, api_key, method="POST")
 
 
-def poll_for_assets(api_url: str, api_key: str, asset_path: str, timeout: int = 300) -> list[dict]:
+def poll_for_assets(
+    api_url: str, api_key: str, asset_path: str, timeout: int = 300
+) -> list[dict]:
     """Poll Immich until assets matching asset_path appear, or timeout."""
     url = f"{api_url}/api/search/metadata"
     deadline = time.monotonic() + timeout
     while True:
-        result = immich_request(url, api_key, method="POST", data={"originalPath": asset_path})
-        assets = result.get("assets", {}).get("items", []) if isinstance(result, dict) else []
+        result = immich_request(
+            url, api_key, method="POST", data={"originalPath": asset_path}
+        )
+        assets = (
+            result.get("assets", {}).get("items", [])
+            if isinstance(result, dict)
+            else []
+        )
         if assets:
             return assets
         if time.monotonic() >= deadline:
@@ -75,7 +85,9 @@ def find_or_create_album(api_url: str, api_key: str, album_name: str) -> str:
     return result["id"]
 
 
-def add_assets_to_album(api_url: str, api_key: str, album_id: str, asset_ids: list[str]) -> None:
+def add_assets_to_album(
+    api_url: str, api_key: str, album_id: str, asset_ids: list[str]
+) -> None:
     """Add assets to an album."""
     url = f"{api_url}/api/albums/{album_id}/assets"
     immich_request(url, api_key, method="PUT", data={"ids": asset_ids})
@@ -95,33 +107,56 @@ def find_user(api_url: str, api_key: str, username: str) -> str | None:
 def share_album(api_url: str, api_key: str, album_id: str, user_id: str) -> None:
     """Share an album with a user as editor."""
     url = f"{api_url}/api/albums/{album_id}/users"
-    immich_request(url, api_key, method="PUT", data={"albumUsers": [{"userId": user_id, "role": "editor"}]})
+    immich_request(
+        url,
+        api_key,
+        method="PUT",
+        data={"albumUsers": [{"userId": user_id, "role": "editor"}]},
+    )
 
 
 def send_pushover(user_key: str, app_token: str, title: str, message: str) -> None:
     """Send a Pushover notification."""
-    data = urllib.parse.urlencode({
-        "token": app_token,
-        "user": user_key,
-        "title": title,
-        "message": message,
-    }).encode()
-    req = urllib.request.Request("https://api.pushover.net/1/messages.json", data=data, method="POST")
+    data = urllib.parse.urlencode(
+        {
+            "token": app_token,
+            "user": user_key,
+            "title": title,
+            "message": message,
+        }
+    ).encode()
+    req = urllib.request.Request(
+        "https://api.pushover.net/1/messages.json", data=data, method="POST"
+    )
     with urllib.request.urlopen(req) as resp:
         resp.read()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Immich integration: scan, create album, add assets, share")
+    parser = argparse.ArgumentParser(
+        description="Immich integration: scan, create album, add assets, share"
+    )
     parser.add_argument("--api-url", required=True, help="Immich server URL")
     parser.add_argument("--api-key", required=True, help="Immich API key")
     parser.add_argument("--library-id", required=True, help="Immich library ID to scan")
-    parser.add_argument("--asset-path", required=True, help="Path prefix to search for new assets")
-    parser.add_argument("--video-filename", required=True, help="Original video filename for album naming")
-    parser.add_argument("--share-user", default=None, help="Immich username to share album with")
+    parser.add_argument(
+        "--asset-path", required=True, help="Path prefix to search for new assets"
+    )
+    parser.add_argument(
+        "--video-filename",
+        required=True,
+        help="Original video filename for album naming",
+    )
+    parser.add_argument(
+        "--share-user", default=None, help="Immich username to share album with"
+    )
     parser.add_argument("--pushover-user-key", default=None, help="Pushover user key")
-    parser.add_argument("--pushover-app-token", default=None, help="Pushover application API token")
-    parser.add_argument("--photo-count", type=int, default=None, help="Number of photos extracted")
+    parser.add_argument(
+        "--pushover-app-token", default=None, help="Pushover application API token"
+    )
+    parser.add_argument(
+        "--photo-count", type=int, default=None, help="Number of photos extracted"
+    )
     args = parser.parse_args()
 
     api_url = args.api_url.rstrip("/")
@@ -146,7 +181,10 @@ def main() -> None:
     assets = poll_for_assets(api_url, args.api_key, asset_search_path)
     if not assets:
         print("none found")
-        print("Warning: no assets found after waiting — album creation skipped", file=sys.stderr)
+        print(
+            "Warning: no assets found after waiting — album creation skipped",
+            file=sys.stderr,
+        )
         sys.exit(0)
     asset_ids = [a["id"] for a in assets]
     print(f"{len(asset_ids)} found")
@@ -186,7 +224,10 @@ def main() -> None:
                 notification_parts.append(f"shared with {args.share_user}")
             else:
                 print("user not found")
-                print(f"Warning: user '{args.share_user}' not found — album not shared", file=sys.stderr)
+                print(
+                    f"Warning: user '{args.share_user}' not found — album not shared",
+                    file=sys.stderr,
+                )
         except urllib.error.URLError as e:
             print("failed")
             print(f"Error: failed to share album: {e}", file=sys.stderr)
@@ -202,7 +243,9 @@ def main() -> None:
             if notification_parts:
                 lines.append(", ".join(notification_parts))
             message = "\n".join(lines)
-            send_pushover(args.pushover_user_key, args.pushover_app_token, album_name, message)
+            send_pushover(
+                args.pushover_user_key, args.pushover_app_token, album_name, message
+            )
             print("done")
         except urllib.error.URLError as e:
             print("failed")

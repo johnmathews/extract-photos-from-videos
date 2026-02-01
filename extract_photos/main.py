@@ -7,7 +7,9 @@ from batch_processor import process_videos_in_directory
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Extract photos with borders from videos in a directory.")
+    parser = argparse.ArgumentParser(
+        description="Extract photos with borders from videos in a directory."
+    )
     parser.add_argument(
         "input_directory",
         help="Path to the directory containing videos (can be relative or absolute).",
@@ -19,10 +21,26 @@ def main():
         help="Name of the subdirectory to store extracted photos (default: 'extracted_photos').",
     )
     parser.add_argument(
-        "-s", "--step_time", type=float, default=0.5, help="Time interval (in seconds) to skip between frames."
+        "-s",
+        "--step_time",
+        type=float,
+        default=0.5,
+        help="Time interval (in seconds) to skip between frames.",
     )
-    parser.add_argument("-t", "--ssim_threshold", type=float, default=0.90, help="Threshold for SSIM similarity.")
-    parser.add_argument("-b", "--border_px", type=int, default=5, help="Border size in pixels to add around extracted photos (default: 5).")
+    parser.add_argument(
+        "-t",
+        "--ssim_threshold",
+        type=float,
+        default=0.90,
+        help="Threshold for SSIM similarity.",
+    )
+    parser.add_argument(
+        "-b",
+        "--border_px",
+        type=int,
+        default=5,
+        help="Border size in pixels to add around extracted photos (default: 5).",
+    )
 
     args = parser.parse_args()
 

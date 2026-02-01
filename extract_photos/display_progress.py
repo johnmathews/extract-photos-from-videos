@@ -22,7 +22,9 @@ def build_progress_bar(pct, width=30):
     return "[" + "=" * filled + "-" * (width - filled) + "]"
 
 
-def print_scan_progress(filename, pct, video_pos_sec, video_duration_sec, photo_count, eta_str):
+def print_scan_progress(
+    filename, pct, video_pos_sec, video_duration_sec, photo_count, eta_str
+):
     """
     Print a 3-line in-place progress display for the scanning phase.
 

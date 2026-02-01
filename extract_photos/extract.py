@@ -2,7 +2,6 @@
 
 import json
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -50,7 +49,9 @@ def detect_almost_uniform_borders(frame, border_width=5, threshold=10):
         bool: True if all borders are almost uniform, False otherwise.
     """
     # Convert frame to grayscale if it is not already
-    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if len(frame.shape) == 3 else frame
+    gray_frame = (
+        cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if len(frame.shape) == 3 else frame
+    )
 
     # Extract border regions
     left_border = gray_frame[:, :border_width]
@@ -105,12 +106,26 @@ def transcode_lowres(video_file, video_duration_sec):
     tmp2 = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     tmp2.close()
 
-    cmd1 = ["ffmpeg", "-i", video_file, "-t", str(midpoint)] + scale_args + progress_args + [tmp1.name, "-y"]
-    cmd2 = ["ffmpeg", "-ss", str(midpoint), "-i", video_file] + scale_args + progress_args + [tmp2.name, "-y"]
+    cmd1 = (
+        ["ffmpeg", "-i", video_file, "-t", str(midpoint)]
+        + scale_args
+        + progress_args
+        + [tmp1.name, "-y"]
+    )
+    cmd2 = (
+        ["ffmpeg", "-ss", str(midpoint), "-i", video_file]
+        + scale_args
+        + progress_args
+        + [tmp2.name, "-y"]
+    )
 
     try:
-        proc1 = subprocess.Popen(cmd1, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        proc2 = subprocess.Popen(cmd2, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        proc1 = subprocess.Popen(
+            cmd1, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+        )
+        proc2 = subprocess.Popen(
+            cmd2, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+        )
     except FileNotFoundError:
         os.unlink(tmp1.name)
         os.unlink(tmp2.name)
@@ -154,7 +169,9 @@ def transcode_lowres(video_file, video_duration_sec):
     if proc1.returncode != 0 or proc2.returncode != 0:
         os.unlink(tmp1.name)
         os.unlink(tmp2.name)
-        raise RuntimeError(f"ffmpeg failed (exit codes: {proc1.returncode}, {proc2.returncode})")
+        raise RuntimeError(
+            f"ffmpeg failed (exit codes: {proc1.returncode}, {proc2.returncode})"
+        )
 
     # Concatenate the two halves (stream copy, very fast)
     concat_out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
@@ -166,8 +183,21 @@ def transcode_lowres(video_file, video_duration_sec):
 
     try:
         subprocess.run(
-            ["ffmpeg", "-f", "concat", "-safe", "0", "-i", filelist.name, "-c", "copy", concat_out.name, "-y"],
-            check=True, capture_output=True,
+            [
+                "ffmpeg",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                filelist.name,
+                "-c",
+                "copy",
+                concat_out.name,
+                "-y",
+            ],
+            check=True,
+            capture_output=True,
         )
     except subprocess.CalledProcessError as e:
         os.unlink(concat_out.name)
@@ -221,7 +251,10 @@ def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
 
         if detect_almost_uniform_borders(frame):
             frame_hash = compute_frame_hash(frame)
-            is_new = prev_photo_hash is None or hash_difference(frame_hash, prev_photo_hash) > HASH_DIFF_THRESHOLD
+            is_new = (
+                prev_photo_hash is None
+                or hash_difference(frame_hash, prev_photo_hash) > HASH_DIFF_THRESHOLD
+            )
             if is_new:
                 photo_timestamps.append((timestamp_sec, time_str))
                 prev_photo_hash = frame_hash
@@ -239,13 +272,27 @@ def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
                 eta_str = f"ETA {format_time(eta_sec)}"
             else:
                 eta_str = "ETA --:--"
-            print_scan_progress(filename, pct, timestamp_sec, video_duration_sec, len(photo_timestamps), eta_str)
+            print_scan_progress(
+                filename,
+                pct,
+                timestamp_sec,
+                video_duration_sec,
+                len(photo_timestamps),
+                eta_str,
+            )
 
     cap.release()
 
     # Final progress update with elapsed time
     elapsed = format_time(time.monotonic() - wall_start)
-    print_scan_progress(filename, 100.0, video_duration_sec, video_duration_sec, len(photo_timestamps), f"took {elapsed}")
+    print_scan_progress(
+        filename,
+        100.0,
+        video_duration_sec,
+        video_duration_sec,
+        len(photo_timestamps),
+        f"took {elapsed}",
+    )
     print()
 
     return photo_timestamps
@@ -275,8 +322,16 @@ def get_video_metadata(video_file):
     Returns (fps, duration_sec) tuple. Raises RuntimeError if ffprobe fails.
     """
     cmd = [
-        "ffprobe", "-v", "quiet", "-print_format", "json",
-        "-show_format", "-show_streams", "-select_streams", "v:0", video_file,
+        "ffprobe",
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
+        "-select_streams",
+        "v:0",
+        video_file,
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, check=True, text=True)
@@ -319,7 +374,9 @@ def get_video_metadata(video_file):
     return fps, duration_sec
 
 
-def extract_fullres_frames(video_file, output_folder, photo_timestamps, filename, logger, border_px=5):
+def extract_fullres_frames(
+    video_file, output_folder, photo_timestamps, filename, logger, border_px=5
+):
     """Extract full-resolution frames at the given timestamps from the original video.
 
     Uses ffmpeg to seek and decode each frame (works with any codec including AV1),
@@ -334,19 +391,36 @@ def extract_fullres_frames(video_file, output_folder, photo_timestamps, filename
     try:
         for timestamp_sec, time_str in photo_timestamps:
             cmd = [
-                "ffmpeg", "-ss", str(timestamp_sec), "-i", video_file,
-                "-frames:v", "1", "-q:v", "2", tmp_frame.name, "-y",
+                "ffmpeg",
+                "-ss",
+                str(timestamp_sec),
+                "-i",
+                video_file,
+                "-frames:v",
+                "1",
+                "-q:v",
+                "2",
+                tmp_frame.name,
+                "-y",
             ]
             result = subprocess.run(cmd, capture_output=True)
             if result.returncode != 0:
-                print(f"  {time_str}  -- skipped: ffmpeg failed to extract frame", flush=True)
+                print(
+                    f"  {time_str}  -- skipped: ffmpeg failed to extract frame",
+                    flush=True,
+                )
                 logger.warning(f"{time_str}: ffmpeg failed at {timestamp_sec:.1f}s")
                 continue
 
             frame = cv2.imread(tmp_frame.name)
             if frame is None:
-                print(f"  {time_str}  -- skipped: could not read extracted frame", flush=True)
-                logger.warning(f"{time_str}: could not read frame at {timestamp_sec:.1f}s")
+                print(
+                    f"  {time_str}  -- skipped: could not read extracted frame",
+                    flush=True,
+                )
+                logger.warning(
+                    f"{time_str}: could not read frame at {timestamp_sec:.1f}s"
+                )
                 continue
 
             trimmed_frame = trim_and_add_border(frame, border_px=border_px)
@@ -368,7 +442,9 @@ def extract_fullres_frames(video_file, output_folder, photo_timestamps, filename
     return saved_count
 
 
-def extract_photos_from_video(video_file, output_folder, step_time, ssim_threshold, filename, border_px=5):
+def extract_photos_from_video(
+    video_file, output_folder, step_time, ssim_threshold, filename, border_px=5
+):
     """Extract photos from a video using a three-phase pipeline:
     1. Transcode to low-res temp file
     2. Scan low-res for photo timestamps
@@ -387,7 +463,9 @@ def extract_photos_from_video(video_file, output_folder, step_time, ssim_thresho
     fps, video_duration_sec = get_video_metadata(video_file)
 
     logger.info(f"File: {filename}")
-    logger.info(f"fps: {fps}, duration: {format_time(video_duration_sec)}, step_time: {step_time}s")
+    logger.info(
+        f"fps: {fps}, duration: {format_time(video_duration_sec)}, step_time: {step_time}s"
+    )
 
     # Phase 1: Transcode to low-res
     print(f"{_ts()} [1/3] Transcoding to low resolution...", flush=True)
@@ -397,15 +475,27 @@ def extract_photos_from_video(video_file, output_folder, step_time, ssim_thresho
     try:
         # Phase 2: Scan low-res for photo timestamps
         print(f"{_ts()} [2/3] Scanning for photos...", flush=True)
-        photo_timestamps = scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec)
+        photo_timestamps = scan_for_photos(
+            lowres_path, fps, step_time, filename, video_duration_sec
+        )
         logger.info(f"Scan complete: found {len(photo_timestamps)} candidate photos")
 
         # Phase 3: Extract full-res frames
         candidates = len(photo_timestamps)
         if candidates:
-            print(f"{_ts()} [3/3] Extracting {candidates} candidates at full resolution...", flush=True)
+            print(
+                f"{_ts()} [3/3] Extracting {candidates} candidates at full resolution...",
+                flush=True,
+            )
             extract_start = time.monotonic()
-            saved = extract_fullres_frames(video_file, output_folder, photo_timestamps, filename, logger, border_px=border_px)
+            saved = extract_fullres_frames(
+                video_file,
+                output_folder,
+                photo_timestamps,
+                filename,
+                logger,
+                border_px=border_px,
+            )
             extract_elapsed = format_time(time.monotonic() - extract_start)
         else:
             print(f"{_ts()} [3/3] No photos found.", flush=True)
@@ -418,4 +508,7 @@ def extract_photos_from_video(video_file, output_folder, step_time, ssim_thresho
     logger.info(f"Done: {saved} photos saved to {output_folder}")
     skipped = candidates - saved if candidates else 0
     skipped_msg = f" ({skipped} failed validation)" if skipped else ""
-    print(f"{_ts()} Extracted {saved} photos to {output_folder}/{skipped_msg}  took {extract_elapsed}", flush=True)
+    print(
+        f"{_ts()} Extracted {saved} photos to {output_folder}/{skipped_msg}  took {extract_elapsed}",
+        flush=True,
+    )
