@@ -184,17 +184,23 @@ echo "Copied video to $FINAL_OUTPUT/$(basename "$VIDEO")"
 # Trigger Immich library rescan if configured
 # Set IMMICH_API_KEY, IMMICH_LIBRARY_ID, and IMMICH_API_URL in the remote
 # shell profile (e.g. ~/.bashrc). If any are unset, this step is skipped.
-if [ -n "${IMMICH_API_KEY:-}" ] && [ -n "${IMMICH_LIBRARY_ID:-}" ] && [ -n "${IMMICH_API_URL:-}" ]; then
-    IMMICH_URL="${IMMICH_API_URL}"
+MISSING_VARS=()
+[ -z "${IMMICH_API_KEY:-}" ] && MISSING_VARS+=(IMMICH_API_KEY)
+[ -z "${IMMICH_LIBRARY_ID:-}" ] && MISSING_VARS+=(IMMICH_LIBRARY_ID)
+[ -z "${IMMICH_API_URL:-}" ] && MISSING_VARS+=(IMMICH_API_URL)
+
+if [ ${#MISSING_VARS[@]} -eq 0 ]; then
     echo "Triggering Immich library rescan..."
     HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
-        -X POST "${IMMICH_URL}/api/libraries/${IMMICH_LIBRARY_ID}/scan" \
+        -X POST "${IMMICH_API_URL}/api/libraries/${IMMICH_LIBRARY_ID}/scan" \
         -H "x-api-key: ${IMMICH_API_KEY}")"
     if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
         echo "Immich library rescan triggered (HTTP $HTTP_CODE)"
     else
         echo "Warning: Immich rescan failed (HTTP $HTTP_CODE)" >&2
     fi
+else
+    echo "Skipping Immich library rescan (missing env vars: ${MISSING_VARS[*]})"
 fi
 EXTRACTION
 
