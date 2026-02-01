@@ -92,9 +92,42 @@ def transcode_lowres(video_file, video_duration_sec):
 
     Splits the video in half and transcodes both halves in parallel,
     then concatenates the results. Shows a combined progress bar.
+    Falls back to single-pass transcode if duration is unknown.
     Returns path to the temporary low-res file.
     Raises RuntimeError if ffmpeg is not found or fails.
     """
+    progress_args = ["-progress", "pipe:1", "-nostats"]
+    scale_args = ["-vf", "scale=320:-2", "-an", "-q:v", "5"]
+
+    # Fall back to single-pass when duration is unknown (can't split reliably)
+    if video_duration_sec <= 0:
+        outfile = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        outfile.close()
+        cmd = ["ffmpeg", "-i", video_file] + scale_args + progress_args + [outfile.name, "-y"]
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        except FileNotFoundError:
+            os.unlink(outfile.name)
+            raise RuntimeError("ffmpeg not found. Install ffmpeg to use this tool.")
+
+        progress = [0.0]
+        t = Thread(target=_read_ffmpeg_progress, args=(proc, 0, progress, 0))
+        t.start()
+        wall_start = time.monotonic()
+        while t.is_alive():
+            sys.stdout.write(f"\r {build_progress_bar(0)}    0.0%   ETA --:--\033[K")
+            sys.stdout.flush()
+            time.sleep(1)
+        t.join()
+        proc.wait()
+        elapsed = format_time(time.monotonic() - wall_start)
+        sys.stdout.write(f"\r {build_progress_bar(100)}  100.0%   took {elapsed}\033[K\n")
+        sys.stdout.flush()
+        if proc.returncode != 0:
+            os.unlink(outfile.name)
+            raise RuntimeError(f"ffmpeg failed (exit code: {proc.returncode})")
+        return outfile.name
+
     midpoint = video_duration_sec / 2
 
     tmp1 = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
@@ -102,8 +135,6 @@ def transcode_lowres(video_file, video_duration_sec):
     tmp2 = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     tmp2.close()
 
-    progress_args = ["-progress", "pipe:1", "-nostats"]
-    scale_args = ["-vf", "scale=320:-2", "-an", "-q:v", "5"]
     cmd1 = ["ffmpeg", "-i", video_file, "-t", str(midpoint)] + scale_args + progress_args + [tmp1.name, "-y"]
     cmd2 = ["ffmpeg", "-ss", str(midpoint), "-i", video_file] + scale_args + progress_args + [tmp2.name, "-y"]
 
