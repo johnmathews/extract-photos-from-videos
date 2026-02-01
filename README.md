@@ -183,8 +183,7 @@ immediately. Set these environment variables on the media VM (e.g. in
 | ------------------ | -------- | ------------------------------------------------------ |
 | `IMMICH_API_KEY`   | Yes      | API key (create in Immich under Account Settings)      |
 | `IMMICH_LIBRARY_ID`| Yes      | External library ID to rescan                          |
-| `IMMICH_API_URL`   | No       | Immich server URL (default: `http://localhost:2283`)   |
+| `IMMICH_API_URL`   | Yes      | Immich server URL (e.g. `http://localhost:2283`)       |
 
-If both `IMMICH_API_KEY` and `IMMICH_LIBRARY_ID` are set, the rescan is
-triggered automatically after photos are copied. If either is unset, the step
-is skipped silently.
+If all three variables are set, the rescan is triggered automatically after
+photos are copied. If any are unset, the step is skipped silently.

@@ -23,7 +23,7 @@ Options:
 Environment variables (set on the media VM):
   IMMICH_API_KEY         Immich API key (enables library rescan after extraction)
   IMMICH_LIBRARY_ID      Immich external library ID to rescan
-  IMMICH_API_URL         Immich server URL (default: http://localhost:2283)
+  IMMICH_API_URL         Immich server URL (e.g. http://localhost:2283)
 
 Prerequisites:
   ssh media must be configured and working.
@@ -182,10 +182,10 @@ cp "$(realpath "$VIDEO")" "$FINAL_OUTPUT/"
 echo "Copied video to $FINAL_OUTPUT/$(basename "$VIDEO")"
 
 # Trigger Immich library rescan if configured
-# Set IMMICH_API_KEY, IMMICH_LIBRARY_ID, and optionally IMMICH_API_URL in the
-# remote shell profile (e.g. ~/.bashrc). If not set, this step is skipped.
-if [ -n "${IMMICH_API_KEY:-}" ] && [ -n "${IMMICH_LIBRARY_ID:-}" ]; then
-    IMMICH_URL="${IMMICH_API_URL:-http://localhost:2283}"
+# Set IMMICH_API_KEY, IMMICH_LIBRARY_ID, and IMMICH_API_URL in the remote
+# shell profile (e.g. ~/.bashrc). If any are unset, this step is skipped.
+if [ -n "${IMMICH_API_KEY:-}" ] && [ -n "${IMMICH_LIBRARY_ID:-}" ] && [ -n "${IMMICH_API_URL:-}" ]; then
+    IMMICH_URL="${IMMICH_API_URL}"
     echo "Triggering Immich library rescan..."
     HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
         -X POST "${IMMICH_URL}/api/libraries/${IMMICH_LIBRARY_ID}/scan" \
