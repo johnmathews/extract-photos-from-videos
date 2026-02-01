@@ -171,3 +171,20 @@ epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos step_time=1.0 ssi
 # Quote arguments containing shell special characters (e.g. brackets)
 epm input_file="/data/videos/video-[abc123].mkv" output_dir=/data/photos
 ```
+
+### Immich integration
+
+After extracting photos, `epm` can automatically trigger an
+[Immich](https://immich.app/) external library rescan so new photos appear
+immediately. Set these environment variables on the media VM (e.g. in
+`~/.bashrc`):
+
+| Variable           | Required | Description                                            |
+| ------------------ | -------- | ------------------------------------------------------ |
+| `IMMICH_API_KEY`   | Yes      | API key (create in Immich under Account Settings)      |
+| `IMMICH_LIBRARY_ID`| Yes      | External library ID to rescan                          |
+| `IMMICH_API_URL`   | No       | Immich server URL (default: `http://localhost:2283`)   |
+
+If both `IMMICH_API_KEY` and `IMMICH_LIBRARY_ID` are set, the rescan is
+triggered automatically after photos are copied. If either is unset, the step
+is skipped silently.

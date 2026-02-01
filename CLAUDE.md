@@ -49,7 +49,7 @@ Key modules in `extract_photos/`:
 - **utils.py** - SSIM calculation (via scikit-image), photo validation, safe folder names, logging.
 - **display_progress.py** - `format_time()`, `build_progress_bar()`, and `print_scan_progress()` for 3-line in-place terminal progress.
 
-**bin/epm** - Bash wrapper that SSHes into `media` VM to run the tool on a single video. Auto-installs repo/deps on first run and auto-updates (`git pull` + `uv sync`) on subsequent runs. Arguments with special shell characters (e.g. `[]` in filenames) must be quoted. Creates a temp dir with a symlink to bridge single-file input to the tool's directory-based interface.
+**bin/epm** - Bash wrapper that SSHes into `media` VM to run the tool on a single video. Auto-installs repo/deps on first run and auto-updates (`git pull` + `uv sync`) on subsequent runs. Arguments with special shell characters (e.g. `[]` in filenames) must be quoted. Creates a temp dir with a symlink to bridge single-file input to the tool's directory-based interface. Optionally triggers an Immich library rescan after extraction if `IMMICH_API_KEY` and `IMMICH_LIBRARY_ID` env vars are set on the remote.
 
 ## Output structure
 
