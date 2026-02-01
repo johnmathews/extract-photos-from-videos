@@ -275,7 +275,7 @@ def get_video_metadata(video_file):
     """
     cmd = [
         "ffprobe", "-v", "quiet", "-print_format", "json",
-        "-show_streams", "-select_streams", "v:0", video_file,
+        "-show_format", "-show_streams", "-select_streams", "v:0", video_file,
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, check=True, text=True)
@@ -289,6 +289,7 @@ def get_video_metadata(video_file):
     if not streams:
         raise RuntimeError(f"ffprobe found no video stream in {video_file}")
     stream = streams[0]
+    fmt = data.get("format", {})
 
     # Parse fps from r_frame_rate (e.g. "30000/1001") or avg_frame_rate
     fps = 0
@@ -305,10 +306,12 @@ def get_video_metadata(video_file):
             if fps > 0:
                 break
 
-    # Parse duration
+    # Parse duration — try stream first, then container format (MKV stores it there)
     duration_sec = 0.0
     if "duration" in stream:
         duration_sec = float(stream["duration"])
+    elif "duration" in fmt:
+        duration_sec = float(fmt["duration"])
     elif "nb_frames" in stream and fps > 0:
         duration_sec = int(stream["nb_frames"]) / fps
 
