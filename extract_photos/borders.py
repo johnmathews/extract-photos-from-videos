@@ -4,70 +4,76 @@ import cv2
 import numpy as np
 
 
-def trim_and_add_border(image, target_border_fraction=0.05):
+def trim_and_add_border(image, border_px=5, uniformity_threshold=10):
     """
-    Adjusts the border of an image. Identifies the content inside the solid border,
-    trims the solid border, and adds a resized solid border that matches the original border color.
+    Trims uniform borders from an image using edge-scanning, then adds a
+    fixed-size border in the original border color.
+
+    Scans inward from each edge (row-by-row for top/bottom, column-by-column
+    for left/right). A row/column is considered "border" if its grayscale
+    standard deviation is below uniformity_threshold. The first non-uniform
+    row/column from each edge marks the content boundary.
 
     Parameters:
-    - image: The input image (NumPy array).
-    - target_border_fraction: Desired fraction of the photo's width and height for the border.
+    - image: The input image (NumPy array, BGR or grayscale).
+    - border_px: Number of pixels to add as border on each side.
+    - uniformity_threshold: Max std deviation for a row/column to be "border".
 
     Returns:
-    - The image with adjusted border (NumPy array).
+    - The image with trimmed and re-added border (NumPy array).
     """
-    # Convert the image to grayscale for easier processing
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    h, w = gray.shape
 
-    # Sample a region of the border to calculate the average border color
-    border_sample = image[:20, :20]  # Top-left 20x20 pixel region
-
-    # Create a binary mask for the content (where pixel intensity ≠ border_color)
-    mask = gray != int(np.mean(border_sample))
-
-    # Find the bounding box of the content
-    coords = np.argwhere(mask)
-
-
-    # Handle edge case: No content detected (empty mask)
-    if coords.size == 0:
+    # Scan from top: first row with std > threshold
+    top = 0
+    for i in range(h):
+        if np.std(gray[i, :]) > uniformity_threshold:
+            top = i
+            break
+    else:
+        # All rows uniform — return original
         return image
 
-    y_min, x_min = coords.min(axis=0)
-    y_max, x_max = coords.max(axis=0)
+    # Scan from bottom: last row with std > threshold
+    bottom = h - 1
+    for i in range(h - 1, -1, -1):
+        if np.std(gray[i, :]) > uniformity_threshold:
+            bottom = i
+            break
 
-    # Crop the image to the content area
-    cropped_image = image[y_min : y_max + 1, x_min : x_max + 1]
+    # Scan from left: first col with std > threshold
+    left = 0
+    for j in range(w):
+        if np.std(gray[:, j]) > uniformity_threshold:
+            left = j
+            break
 
-    # Calculate the new border size (5% of the photo dimensions)
-    h, w = cropped_image.shape[:2]
-    min_dim = min(h, w)
-    border_w = int(min_dim * target_border_fraction)
-    border_h = int(min_dim * target_border_fraction)
+    # Scan from right: last col with std > threshold
+    right = w - 1
+    for j in range(w - 1, -1, -1):
+        if np.std(gray[:, j]) > uniformity_threshold:
+            right = j
+            break
 
-    # Add the new border around the cropped image
-    if len(image.shape) == 2:  # Grayscale image
-        border_color = np.mean(border_sample)  # Average intensity
-        adjusted_image = cv2.copyMakeBorder(
-            cropped_image,
-            border_h,
-            border_h,
-            border_w,
-            border_w,
-            borderType=cv2.BORDER_CONSTANT,
-            value=border_color,
+    # Sample border color from the original border region (top-left corner)
+    border_sample = image[:max(top, 1), :max(left, 1)]
+
+    # Crop to content
+    cropped = image[top : bottom + 1, left : right + 1]
+
+    # Add new border
+    if len(image.shape) == 2:
+        border_color = int(np.mean(border_sample))
+        result = cv2.copyMakeBorder(
+            cropped, border_px, border_px, border_px, border_px,
+            borderType=cv2.BORDER_CONSTANT, value=border_color,
         )
-    else:  # Color image
-        border_color = [int(c) for c in np.mean(border_sample, axis=(0, 1))]  # Average BGR color
-        color_bgr: list[int] = [int(c) for c in border_color]
-        adjusted_image = cv2.copyMakeBorder(
-            cropped_image,
-            border_h,
-            border_h,
-            border_w,
-            border_w,
-            borderType=cv2.BORDER_CONSTANT,
-            value=color_bgr,
+    else:
+        border_color = [int(c) for c in np.mean(border_sample, axis=(0, 1))]
+        result = cv2.copyMakeBorder(
+            cropped, border_px, border_px, border_px, border_px,
+            borderType=cv2.BORDER_CONSTANT, value=border_color,
         )
 
-    return adjusted_image
+    return result

@@ -58,6 +58,7 @@ uv run python extract_photos/main.py INPUT_DIR [options]
 | `-o, --output_subdirectory` | `extracted_photos` | Name of the output subdirectory within `INPUT_DIR`        |
 | `-s, --step_time`           | `0.5`              | Seconds between sampled frames                            |
 | `-t, --ssim_threshold`      | `0.90`             | SSIM threshold for deduplication (0-1, higher = stricter) |
+| `-b, --border_px`           | `5`                | Border size in pixels to add around extracted photos      |
 
 ### Examples
 
@@ -158,6 +159,7 @@ epm input_file=VIDEO output_dir=DIR [options]
 | ---------------------- | ------- | --------------------------------------------------------- |
 | `step_time=SECONDS`    | `0.5`   | Seconds between sampled frames                            |
 | `ssim_threshold=FLOAT` | `0.90`  | SSIM threshold for deduplication (0-1, higher = stricter) |
+| `border_px=INT`        | `5`     | Border size in pixels to add around extracted photos      |
 | `help`                 |         | Show usage                                                |
 
 ### Example Commands

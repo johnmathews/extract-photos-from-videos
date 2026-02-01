@@ -319,7 +319,7 @@ def get_video_metadata(video_file):
     return fps, duration_sec
 
 
-def extract_fullres_frames(video_file, output_folder, photo_timestamps, filename, logger):
+def extract_fullres_frames(video_file, output_folder, photo_timestamps, filename, logger, border_px=5):
     """Extract full-resolution frames at the given timestamps from the original video.
 
     Uses ffmpeg to seek and decode each frame (works with any codec including AV1),
@@ -349,7 +349,7 @@ def extract_fullres_frames(video_file, output_folder, photo_timestamps, filename
                 logger.warning(f"{time_str}: could not read frame at {timestamp_sec:.1f}s")
                 continue
 
-            trimmed_frame = trim_and_add_border(frame)
+            trimmed_frame = trim_and_add_border(frame, border_px=border_px)
             reason = _rejection_reason(trimmed_frame)
             if reason is None:
                 file_name = f"{filename_safe}_{time_str}.jpg"
@@ -368,7 +368,7 @@ def extract_fullres_frames(video_file, output_folder, photo_timestamps, filename
     return saved_count
 
 
-def extract_photos_from_video(video_file, output_folder, step_time, ssim_threshold, filename):
+def extract_photos_from_video(video_file, output_folder, step_time, ssim_threshold, filename, border_px=5):
     """Extract photos from a video using a three-phase pipeline:
     1. Transcode to low-res temp file
     2. Scan low-res for photo timestamps
@@ -405,7 +405,7 @@ def extract_photos_from_video(video_file, output_folder, step_time, ssim_thresho
         if candidates:
             print(f"{_ts()} [3/3] Extracting {candidates} candidates at full resolution...", flush=True)
             extract_start = time.monotonic()
-            saved = extract_fullres_frames(video_file, output_folder, photo_timestamps, filename, logger)
+            saved = extract_fullres_frames(video_file, output_folder, photo_timestamps, filename, logger, border_px=border_px)
             extract_elapsed = format_time(time.monotonic() - extract_start)
         else:
             print(f"{_ts()} [3/3] No photos found.", flush=True)

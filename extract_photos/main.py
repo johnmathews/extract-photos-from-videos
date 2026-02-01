@@ -22,6 +22,7 @@ def main():
         "-s", "--step_time", type=float, default=0.5, help="Time interval (in seconds) to skip between frames."
     )
     parser.add_argument("-t", "--ssim_threshold", type=float, default=0.90, help="Threshold for SSIM similarity.")
+    parser.add_argument("-b", "--border_px", type=int, default=5, help="Border size in pixels to add around extracted photos (default: 5).")
 
     args = parser.parse_args()
 
@@ -37,6 +38,7 @@ def main():
 
     print(f"step_time: {args.step_time}s")
     print(f"similarity threshold: {args.ssim_threshold}")
+    print(f"border_px: {args.border_px}")
 
     print()
 
@@ -46,6 +48,7 @@ def main():
         output_directory=output_directory,
         step_time=args.step_time,
         ssim_threshold=args.ssim_threshold,
+        border_px=args.border_px,
     )
 
 

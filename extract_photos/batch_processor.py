@@ -10,6 +10,7 @@ def process_videos_in_directory(
     output_directory: str,
     step_time: int,
     ssim_threshold: float,
+    border_px: int = 5,
     **kwargs,
 ):
     """
@@ -62,6 +63,7 @@ def process_videos_in_directory(
             step_time=step_time,
             ssim_threshold=ssim_threshold,
             filename=filename,
+            border_px=border_px,
         )
 
     print(

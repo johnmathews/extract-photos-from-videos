@@ -17,6 +17,7 @@ Arguments:
 Options:
   step_time=SECONDS        Time between sampled frames (default: 0.5)
   ssim_threshold=FLOAT     SSIM similarity threshold (default: 0.90)
+  border_px=INT            Border size in pixels around extracted photos (default: 5)
   help                     Show this help message
 
 Prerequisites:
@@ -52,6 +53,9 @@ for arg in "$@"; do
     ;;
   ssim_threshold=*)
     EXTRA_ARGS+=("-t" "${arg#ssim_threshold=}")
+    ;;
+  border_px=*)
+    EXTRA_ARGS+=("-b" "${arg#border_px=}")
     ;;
   *)
     echo "Error: unknown argument '$arg'" >&2

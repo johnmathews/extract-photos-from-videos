@@ -27,9 +27,9 @@ class TestTrimAndAddBorder:
     def test_output_has_border(self):
         img = _make_bordered_image(200, 300, border_size=40, border_color=(0, 0, 0))
         result = trim_and_add_border(img)
-        # Result should have a border added back (5% of min dimension)
-        assert result.shape[0] > 0
-        assert result.shape[1] > 0
+        # Result should have content + 5px border on each side
+        assert result.shape[0] == 200 + 2 * 5
+        assert result.shape[1] == 300 + 2 * 5
 
     def test_border_color_preserved(self):
         border_color = (50, 50, 50)
@@ -50,14 +50,27 @@ class TestTrimAndAddBorder:
     def test_white_border(self):
         img = _make_bordered_image(200, 300, border_size=50, border_color=(255, 255, 255))
         result = trim_and_add_border(img)
-        # Should successfully trim and re-add border
-        assert result.shape[0] > 200
-        assert result.shape[1] > 300
+        # Should successfully trim and re-add 5px border
+        assert result.shape[0] == 200 + 2 * 5
+        assert result.shape[1] == 300 + 2 * 5
 
     def test_thick_border_trimmed(self):
         img = _make_bordered_image(200, 300, border_size=100, border_color=(0, 0, 0))
         result = trim_and_add_border(img)
-        # New border should be 5% of min content dimension = 5% of 200 = 10px each side
-        # So result ~220 x ~320, much smaller than input 400 x 500
+        # Content 200x300 + 5px border each side = 210x310, much smaller than input 400x500
+        assert result.shape[0] == 210
+        assert result.shape[1] == 310
         assert result.shape[0] < img.shape[0]
         assert result.shape[1] < img.shape[1]
+
+    def test_custom_border_px(self):
+        img = _make_bordered_image(200, 300, border_size=40, border_color=(0, 0, 0))
+        result = trim_and_add_border(img, border_px=20)
+        assert result.shape[0] == 200 + 2 * 20
+        assert result.shape[1] == 300 + 2 * 20
+
+    def test_zero_border_px(self):
+        img = _make_bordered_image(200, 300, border_size=40, border_color=(0, 0, 0))
+        result = trim_and_add_border(img, border_px=0)
+        assert result.shape[0] == 200
+        assert result.shape[1] == 300
