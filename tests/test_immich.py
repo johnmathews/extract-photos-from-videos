@@ -1,4 +1,5 @@
 import json
+import urllib.parse
 from unittest.mock import MagicMock, patch
 
 from extract_photos.immich import (
@@ -8,6 +9,7 @@ from extract_photos.immich import (
     immich_request,
     parse_album_name,
     poll_for_assets,
+    send_pushover,
     share_album,
     trigger_scan,
 )
@@ -259,14 +261,41 @@ class TestShareAlbum:
         )
 
 
+class TestSendPushover:
+    @patch("extract_photos.immich.urllib.request.urlopen")
+    def test_sends_correct_request(self, mock_urlopen):
+        mock_urlopen.return_value = _mock_response({"status": 1})
+        send_pushover("user123", "token456", "Test Title", "Test message")
+        req = mock_urlopen.call_args[0][0]
+        assert req.full_url == "https://api.pushover.net/1/messages.json"
+        assert req.get_method() == "POST"
+        body = urllib.parse.parse_qs(req.data.decode())
+        assert body["token"] == ["token456"]
+        assert body["user"] == ["user123"]
+        assert body["title"] == ["Test Title"]
+        assert body["message"] == ["Test message"]
+
+    @patch("extract_photos.immich.urllib.request.urlopen")
+    def test_propagates_url_error(self, mock_urlopen):
+        import urllib.error
+
+        mock_urlopen.side_effect = urllib.error.URLError("connection refused")
+        try:
+            send_pushover("user123", "token456", "Title", "Message")
+            assert False, "Expected URLError"
+        except urllib.error.URLError:
+            pass
+
+
 class TestMain:
+    @patch("extract_photos.immich.send_pushover")
     @patch("extract_photos.immich.share_album")
     @patch("extract_photos.immich.find_user", return_value="user-42")
     @patch("extract_photos.immich.add_assets_to_album")
     @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
     @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}, {"id": "a2"}])
     @patch("extract_photos.immich.trigger_scan")
-    def test_full_flow_with_share(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share):
+    def test_full_flow_with_share(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push):
         from extract_photos.immich import main
 
         args = [
@@ -286,14 +315,16 @@ class TestMain:
         mock_add.assert_called_once_with("http://immich", "key", "album-1", ["a1", "a2"])
         mock_find.assert_called_once_with("http://immich", "key", "john")
         mock_share.assert_called_once_with("http://immich", "key", "album-1", "user-42")
+        mock_push.assert_not_called()
 
+    @patch("extract_photos.immich.send_pushover")
     @patch("extract_photos.immich.share_album")
     @patch("extract_photos.immich.find_user")
     @patch("extract_photos.immich.add_assets_to_album")
     @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
     @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}])
     @patch("extract_photos.immich.trigger_scan")
-    def test_no_share_without_flag(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, capsys):
+    def test_no_share_without_flag(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push, capsys):
         from extract_photos.immich import main
 
         args = [
@@ -355,13 +386,14 @@ class TestMain:
                 assert e.code == 1
         mock_album.assert_not_called()
 
+    @patch("extract_photos.immich.send_pushover")
     @patch("extract_photos.immich.share_album")
     @patch("extract_photos.immich.find_user", return_value=None)
     @patch("extract_photos.immich.add_assets_to_album")
     @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
     @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}])
     @patch("extract_photos.immich.trigger_scan")
-    def test_skips_share_when_user_not_found(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share):
+    def test_skips_share_when_user_not_found(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push):
         from extract_photos.immich import main
 
         args = [
@@ -396,3 +428,120 @@ class TestMain:
             main()
 
         mock_scan.assert_called_once_with("http://immich", "key", "lib-1")
+
+    @patch("extract_photos.immich.send_pushover")
+    @patch("extract_photos.immich.share_album")
+    @patch("extract_photos.immich.find_user", return_value="user-42")
+    @patch("extract_photos.immich.add_assets_to_album")
+    @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
+    @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}, {"id": "a2"}, {"id": "a3"}])
+    @patch("extract_photos.immich.trigger_scan")
+    def test_pushover_sent_with_all_args(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push):
+        from extract_photos.immich import main
+
+        args = [
+            "--api-url", "http://immich",
+            "--api-key", "key",
+            "--library-id", "lib-1",
+            "--asset-path", "/photos/subdir",
+            "--video-filename", "Author-Title-[id].mkv",
+            "--share-user", "john",
+            "--pushover-user-key", "ukey",
+            "--pushover-app-token", "atoken",
+            "--photo-count", "32",
+        ]
+        with patch("sys.argv", ["immich.py"] + args):
+            main()
+
+        mock_push.assert_called_once()
+        call_args = mock_push.call_args
+        assert call_args[0][0] == "ukey"
+        assert call_args[0][1] == "atoken"
+        assert call_args[0][2] == "Author - Title"
+        message = call_args[0][3]
+        assert "32 photos extracted" in message
+        assert "Album: Author - Title" in message
+        assert "3 assets added" in message
+        assert "shared with john" in message
+
+    @patch("extract_photos.immich.send_pushover")
+    @patch("extract_photos.immich.add_assets_to_album")
+    @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
+    @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}])
+    @patch("extract_photos.immich.trigger_scan")
+    def test_pushover_skipped_without_both_keys(self, mock_scan, mock_poll, mock_album, mock_add, mock_push, capsys):
+        from extract_photos.immich import main
+
+        args = [
+            "--api-url", "http://immich",
+            "--api-key", "key",
+            "--library-id", "lib-1",
+            "--asset-path", "/photos/subdir",
+            "--video-filename", "Author-Title.mkv",
+            "--pushover-user-key", "ukey",
+        ]
+        with patch("sys.argv", ["immich.py"] + args):
+            main()
+
+        mock_push.assert_not_called()
+        # Should not mention pushover at all in output
+        output = capsys.readouterr().out
+        assert "notification" not in output.lower()
+
+    @patch("extract_photos.immich.send_pushover")
+    @patch("extract_photos.immich.add_assets_to_album")
+    @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
+    @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}])
+    @patch("extract_photos.immich.trigger_scan")
+    def test_pushover_without_photo_count(self, mock_scan, mock_poll, mock_album, mock_add, mock_push):
+        from extract_photos.immich import main
+
+        args = [
+            "--api-url", "http://immich",
+            "--api-key", "key",
+            "--library-id", "lib-1",
+            "--asset-path", "/photos/subdir",
+            "--video-filename", "Author-Title.mkv",
+            "--pushover-user-key", "ukey",
+            "--pushover-app-token", "atoken",
+        ]
+        with patch("sys.argv", ["immich.py"] + args):
+            main()
+
+        mock_push.assert_called_once()
+        message = mock_push.call_args[0][3]
+        assert "photos extracted" not in message
+        assert "Album: Author - Title" in message
+
+    def test_output_format(self, capsys):
+        """Verify the structured output format with emojis."""
+        from extract_photos.immich import main
+
+        args = [
+            "--api-url", "http://immich",
+            "--api-key", "key",
+            "--library-id", "lib-1",
+            "--asset-path", "/photos/subdir",
+            "--video-filename", "Author-Title-[id].mkv",
+            "--share-user", "john",
+        ]
+        with (
+            patch("sys.argv", ["immich.py"] + args),
+            patch("extract_photos.immich.trigger_scan"),
+            patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}, {"id": "a2"}]),
+            patch("extract_photos.immich.find_or_create_album", return_value="album-1"),
+            patch("extract_photos.immich.add_assets_to_album"),
+            patch("extract_photos.immich.find_user", return_value="user-42"),
+            patch("extract_photos.immich.share_album"),
+        ):
+            main()
+
+        output = capsys.readouterr().out
+        assert "📚 Immich Integration" in output
+        assert "Scanning library..." in output
+        assert "Waiting for assets..." in output
+        assert "2 found" in output
+        assert "Album: Author - Title" in output
+        assert "Creating album..." in output
+        assert "Adding 2 asset(s)..." in output
+        assert "Sharing with john..." in output

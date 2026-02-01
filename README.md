@@ -188,6 +188,8 @@ environment variables on the media VM (e.g. in `~/.bashrc`):
 | `IMMICH_LIBRARY_ID`| Yes      | External library ID to rescan                          |
 | `IMMICH_API_URL`   | Yes      | Immich server URL (e.g. `http://localhost:2283`)       |
 | `IMMICH_SHARE_USER`| No       | Immich username to share created albums with           |
+| `PUSHOVER_USER_KEY`| No       | Pushover user key for notifications                    |
+| `PUSHOVER_APP_TOKEN`| No      | Pushover application API token                         |
 
 If all three required variables are set and the output directory is the
 default (`/mnt/nfs/photos/reference`), `epm` will:
@@ -199,6 +201,7 @@ default (`/mnt/nfs/photos/reference`), `epm` will:
 4. Create a shared album (or reuse an existing one with the same name).
 5. Add the new assets to the album.
 6. If `IMMICH_SHARE_USER` is set, share the album with that user as an editor.
+7. If `PUSHOVER_USER_KEY` and `PUSHOVER_APP_TOKEN` are set, send a push notification with the album name and extraction summary.
 
 If any required variables are unset, the reason is shown in the output. To
 disable the integration entirely, pass `update_immich=false`.

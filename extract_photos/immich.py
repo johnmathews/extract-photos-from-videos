@@ -6,6 +6,7 @@ import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -97,6 +98,19 @@ def share_album(api_url: str, api_key: str, album_id: str, user_id: str) -> None
     immich_request(url, api_key, method="PUT", data={"albumUsers": [{"userId": user_id, "role": "editor"}]})
 
 
+def send_pushover(user_key: str, app_token: str, title: str, message: str) -> None:
+    """Send a Pushover notification."""
+    data = urllib.parse.urlencode({
+        "token": app_token,
+        "user": user_key,
+        "title": title,
+        "message": message,
+    }).encode()
+    req = urllib.request.Request("https://api.pushover.net/1/messages.json", data=data, method="POST")
+    with urllib.request.urlopen(req) as resp:
+        resp.read()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Immich integration: scan, create album, add assets, share")
     parser.add_argument("--api-url", required=True, help="Immich server URL")
@@ -105,64 +119,94 @@ def main() -> None:
     parser.add_argument("--asset-path", required=True, help="Path prefix to search for new assets")
     parser.add_argument("--video-filename", required=True, help="Original video filename for album naming")
     parser.add_argument("--share-user", default=None, help="Immich username to share album with")
+    parser.add_argument("--pushover-user-key", default=None, help="Pushover user key")
+    parser.add_argument("--pushover-app-token", default=None, help="Pushover application API token")
+    parser.add_argument("--photo-count", type=int, default=None, help="Number of photos extracted")
     args = parser.parse_args()
 
     api_url = args.api_url.rstrip("/")
+    album_name = parse_album_name(args.video_filename)
+    notification_parts = []
+
+    print("\n📚 Immich Integration")
 
     # 1. Trigger library scan
-    print("Triggering Immich library scan...")
+    print("  Scanning library...       ", end="", flush=True)
     try:
         trigger_scan(api_url, args.api_key, args.library_id)
-        print("Library scan triggered")
+        print("done")
     except urllib.error.URLError as e:
+        print("failed")
         print(f"Error: failed to trigger library scan: {e}", file=sys.stderr)
         sys.exit(1)
 
     # 2. Poll for new assets
     asset_search_path = args.asset_path.rstrip("/") + "/"
-    print(f"Waiting for assets in {asset_search_path} ...")
+    print("  Waiting for assets...     ", end="", flush=True)
     assets = poll_for_assets(api_url, args.api_key, asset_search_path)
     if not assets:
+        print("none found")
         print("Warning: no assets found after waiting — album creation skipped", file=sys.stderr)
         sys.exit(0)
     asset_ids = [a["id"] for a in assets]
-    print(f"Found {len(asset_ids)} asset(s)")
+    print(f"{len(asset_ids)} found")
 
     # 3. Create or find album
-    album_name = parse_album_name(args.video_filename)
-    print(f"Album: {album_name}")
+    print(f"  Album: {album_name}")
+    print("  Creating album...         ", end="", flush=True)
     try:
         album_id = find_or_create_album(api_url, args.api_key, album_name)
-        print(f"Album ready (id: {album_id})")
+        print("done")
     except urllib.error.URLError as e:
+        print("failed")
         print(f"Error: failed to create/find album: {e}", file=sys.stderr)
         sys.exit(1)
 
     # 4. Add assets to album
-    print(f"Adding {len(asset_ids)} asset(s) to album...")
+    print(f"  Adding {len(asset_ids)} asset(s)...     ", end="", flush=True)
     try:
         add_assets_to_album(api_url, args.api_key, album_id, asset_ids)
-        print("Assets added to album")
+        print("done")
+        notification_parts.append(f"{len(asset_ids)} assets added")
     except urllib.error.URLError as e:
+        print("failed")
         print(f"Error: failed to add assets to album: {e}", file=sys.stderr)
         sys.exit(1)
 
     # 5. Share album if user specified
     if not args.share_user:
-        print("Album not shared (IMMICH_SHARE_USER not set)")
+        print("  Sharing...                not configured (IMMICH_SHARE_USER not set)")
     else:
-        print(f"Sharing album with {args.share_user}...")
+        print(f"  Sharing with {args.share_user}...      ", end="", flush=True)
         try:
             user_id = find_user(api_url, args.api_key, args.share_user)
             if user_id:
                 share_album(api_url, args.api_key, album_id, user_id)
-                print(f"Album shared with {args.share_user}")
+                print("done")
+                notification_parts.append(f"shared with {args.share_user}")
             else:
+                print("user not found")
                 print(f"Warning: user '{args.share_user}' not found — album not shared", file=sys.stderr)
         except urllib.error.URLError as e:
+            print("failed")
             print(f"Error: failed to share album: {e}", file=sys.stderr)
 
-    print("Done")
+    # 6. Send Pushover notification if configured
+    if args.pushover_user_key and args.pushover_app_token:
+        print("  Sending notification...   ", end="", flush=True)
+        try:
+            lines = []
+            if args.photo_count is not None:
+                lines.append(f"{args.photo_count} photos extracted")
+            lines.append(f"Album: {album_name}")
+            if notification_parts:
+                lines.append(", ".join(notification_parts))
+            message = "\n".join(lines)
+            send_pushover(args.pushover_user_key, args.pushover_app_token, album_name, message)
+            print("done")
+        except urllib.error.URLError as e:
+            print("failed")
+            print(f"Error: failed to send notification: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":

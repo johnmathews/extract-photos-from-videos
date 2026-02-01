@@ -26,6 +26,8 @@ Environment variables (set on the media VM):
   IMMICH_LIBRARY_ID      Immich external library ID to scan
   IMMICH_API_URL         Immich server URL (e.g. http://localhost:2283)
   IMMICH_SHARE_USER      Immich username to share albums with (optional)
+  PUSHOVER_USER_KEY      Pushover user key for notifications (optional)
+  PUSHOVER_APP_TOKEN     Pushover application API token (optional)
 
 Prerequisites:
   ssh media must be configured and working.
@@ -210,6 +212,9 @@ else
             --video-filename "$(basename "$VIDEO")"
         )
         [ -n "${IMMICH_SHARE_USER:-}" ] && IMMICH_ARGS+=(--share-user "$IMMICH_SHARE_USER")
+        [ -n "${PUSHOVER_USER_KEY:-}" ] && [ -n "${PUSHOVER_APP_TOKEN:-}" ] && \
+            IMMICH_ARGS+=(--pushover-user-key "$PUSHOVER_USER_KEY" --pushover-app-token "$PUSHOVER_APP_TOKEN")
+        IMMICH_ARGS+=(--photo-count "$PHOTO_COUNT")
 
         python extract_photos/immich.py "${IMMICH_ARGS[@]}"
     fi

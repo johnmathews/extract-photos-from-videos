@@ -41,7 +41,8 @@
       "WebFetch(domain:docs.immich.app)",
       "WebFetch(domain:api.immich.app)",
       "Bash(git -C /Users/john/projects/photo-video/extract-photos add:*)",
-      "Bash(git -C /Users/john/projects/photo-video/extract-photos commit -m \"$\\(cat <<''EOF''\nAdd Immich album creation and sharing after photo extraction\n\nAfter extracting photos, epm now creates an Immich album from the video\nfilename, adds the new assets to it, and optionally shares with a\nconfigured user. Replaces the previous curl-based library rescan with a\nPython script \\(immich.py\\) that handles the full workflow: scan, poll for\nassets, create/reuse album, add assets, and share.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git -C /Users/john/projects/photo-video/extract-photos commit -m \"$\\(cat <<''EOF''\nAdd Immich album creation and sharing after photo extraction\n\nAfter extracting photos, epm now creates an Immich album from the video\nfilename, adds the new assets to it, and optionally shares with a\nconfigured user. Replaces the previous curl-based library rescan with a\nPython script \\(immich.py\\) that handles the full workflow: scan, poll for\nassets, create/reuse album, add assets, and share.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
