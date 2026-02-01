@@ -293,7 +293,7 @@ class TestMain:
     @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
     @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}])
     @patch("extract_photos.immich.trigger_scan")
-    def test_no_share_without_flag(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share):
+    def test_no_share_without_flag(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, capsys):
         from extract_photos.immich import main
 
         args = [
@@ -308,6 +308,7 @@ class TestMain:
 
         mock_find.assert_not_called()
         mock_share.assert_not_called()
+        assert "IMMICH_SHARE_USER not set" in capsys.readouterr().out
 
     @patch("extract_photos.immich.find_or_create_album")
     @patch("extract_photos.immich.poll_for_assets", return_value=[])

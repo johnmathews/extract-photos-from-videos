@@ -148,7 +148,9 @@ def main() -> None:
         sys.exit(1)
 
     # 5. Share album if user specified
-    if args.share_user:
+    if not args.share_user:
+        print("Album not shared (IMMICH_SHARE_USER not set)")
+    else:
         print(f"Sharing album with {args.share_user}...")
         try:
             user_id = find_user(api_url, args.api_key, args.share_user)
