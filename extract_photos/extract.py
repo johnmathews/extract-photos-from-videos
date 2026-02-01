@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import json
 import os
 import re
 import subprocess
@@ -267,40 +268,99 @@ def _rejection_reason(image):
     return None
 
 
-def extract_fullres_frames(video_file, output_folder, photo_timestamps, fps, filename, logger):
+def get_video_metadata(video_file):
+    """Get video fps and duration using ffprobe.
+
+    Returns (fps, duration_sec) tuple. Raises RuntimeError if ffprobe fails.
+    """
+    cmd = [
+        "ffprobe", "-v", "quiet", "-print_format", "json",
+        "-show_streams", "-select_streams", "v:0", video_file,
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, check=True, text=True)
+    except FileNotFoundError:
+        raise RuntimeError("ffprobe not found. Install ffmpeg to use this tool.")
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"ffprobe failed: {e.stderr}")
+
+    data = json.loads(result.stdout)
+    streams = data.get("streams", [])
+    if not streams:
+        raise RuntimeError(f"ffprobe found no video stream in {video_file}")
+    stream = streams[0]
+
+    # Parse fps from r_frame_rate (e.g. "30000/1001") or avg_frame_rate
+    fps = 0
+    for key in ("r_frame_rate", "avg_frame_rate"):
+        rate_str = stream.get(key, "0/0")
+        if "/" in rate_str:
+            num, den = rate_str.split("/", 1)
+            if int(den) > 0:
+                fps = int(round(int(num) / int(den)))
+                if fps > 0:
+                    break
+        elif rate_str:
+            fps = int(round(float(rate_str)))
+            if fps > 0:
+                break
+
+    # Parse duration
+    duration_sec = 0.0
+    if "duration" in stream:
+        duration_sec = float(stream["duration"])
+    elif "nb_frames" in stream and fps > 0:
+        duration_sec = int(stream["nb_frames"]) / fps
+
+    return fps, duration_sec
+
+
+def extract_fullres_frames(video_file, output_folder, photo_timestamps, filename, logger):
     """Extract full-resolution frames at the given timestamps from the original video.
 
-    Opens the original video, seeks to each timestamp, decodes the frame,
+    Uses ffmpeg to seek and decode each frame (works with any codec including AV1),
     runs trim_and_add_border + validation, and saves as JPEG. Prints a line
     per candidate showing the result.
     """
-    cap = cv2.VideoCapture(video_file)
     filename_safe = make_safe_folder_name(os.path.splitext(filename)[0])
     saved_count = 0
+    tmp_frame = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+    tmp_frame.close()
 
-    for timestamp_sec, time_str in photo_timestamps:
-        target_frame = int(timestamp_sec * fps)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
-        ret, frame = cap.read()
-        if not ret:
-            print(f"  {time_str}  -- skipped: could not read frame", flush=True)
-            logger.warning(f"{time_str}: could not read frame at {timestamp_sec:.1f}s")
-            continue
+    try:
+        for timestamp_sec, time_str in photo_timestamps:
+            cmd = [
+                "ffmpeg", "-ss", str(timestamp_sec), "-i", video_file,
+                "-frames:v", "1", "-q:v", "2", tmp_frame.name, "-y",
+            ]
+            result = subprocess.run(cmd, capture_output=True)
+            if result.returncode != 0:
+                print(f"  {time_str}  -- skipped: ffmpeg failed to extract frame", flush=True)
+                logger.warning(f"{time_str}: ffmpeg failed at {timestamp_sec:.1f}s")
+                continue
 
-        trimmed_frame = trim_and_add_border(frame)
-        reason = _rejection_reason(trimmed_frame)
-        if reason is None:
-            file_name = f"{filename_safe}_{time_str}.jpg"
-            photo_path = os.path.join(output_folder, file_name)
-            cv2.imwrite(photo_path, trimmed_frame)
-            saved_count += 1
-            print(f"  {time_str}  -- saved", flush=True)
-            logger.info(f"{time_str}: saved {file_name}")
-        else:
-            print(f"  {time_str}  -- skipped: {reason}", flush=True)
-            logger.info(f"{time_str}: skipped ({reason})")
+            frame = cv2.imread(tmp_frame.name)
+            if frame is None:
+                print(f"  {time_str}  -- skipped: could not read extracted frame", flush=True)
+                logger.warning(f"{time_str}: could not read frame at {timestamp_sec:.1f}s")
+                continue
 
-    cap.release()
+            trimmed_frame = trim_and_add_border(frame)
+            reason = _rejection_reason(trimmed_frame)
+            if reason is None:
+                file_name = f"{filename_safe}_{time_str}.jpg"
+                photo_path = os.path.join(output_folder, file_name)
+                cv2.imwrite(photo_path, trimmed_frame)
+                saved_count += 1
+                print(f"  {time_str}  -- saved", flush=True)
+                logger.info(f"{time_str}: saved {file_name}")
+            else:
+                print(f"  {time_str}  -- skipped: {reason}", flush=True)
+                logger.info(f"{time_str}: skipped ({reason})")
+    finally:
+        if os.path.exists(tmp_frame.name):
+            os.unlink(tmp_frame.name)
+
     return saved_count
 
 
@@ -319,12 +379,8 @@ def extract_photos_from_video(video_file, output_folder, step_time, ssim_thresho
     log_file = os.path.join(log_dir, f"{filename_safe}.log")
     logger = setup_logger(log_file)
 
-    # Get video metadata
-    cap = cv2.VideoCapture(video_file)
-    fps = int(cap.get(cv2.CAP_PROP_FPS))
-    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    video_duration_sec = frame_count / fps if fps > 0 else 0
-    cap.release()
+    # Get video metadata via ffprobe (works with any codec including AV1)
+    fps, video_duration_sec = get_video_metadata(video_file)
 
     logger.info(f"File: {filename}")
     logger.info(f"fps: {fps}, duration: {format_time(video_duration_sec)}, step_time: {step_time}s")
@@ -345,7 +401,7 @@ def extract_photos_from_video(video_file, output_folder, step_time, ssim_thresho
         if candidates:
             print(f"{_ts()} [3/3] Extracting {candidates} candidates at full resolution...", flush=True)
             extract_start = time.monotonic()
-            saved = extract_fullres_frames(video_file, output_folder, photo_timestamps, fps, filename, logger)
+            saved = extract_fullres_frames(video_file, output_folder, photo_timestamps, filename, logger)
             extract_elapsed = format_time(time.monotonic() - extract_start)
         else:
             print(f"{_ts()} [3/3] No photos found.", flush=True)
