@@ -7,6 +7,18 @@ saves each as a JPEG.
 Built for studying other photographers' work from YouTube videos -- view photos
 at your own pace, in any order, and annotate them.
 
+## Known issues
+
+### Movie playback in Immich
+
+Immich supports MKV containers, but the codec matters for playback.
+yt-dlp typically downloads AV1+Opus in MKV — AV1 decoding needs server-side transcoding in Immich which may not be configured.
+The safest target is H.264+AAC in MP4 and ensuring that the movie file copied into the photos/reference/ subdirectory conforms to this requirement still needs to be implemented.
+
+### Some photos are not extracted from a video
+
+Most are, but some are not. I dont know why. need to investigate.
+
 ## How it works
 
 1. Point the tool at a directory containing one or more video files.
@@ -186,14 +198,14 @@ After extracting photos, `epm` can automatically create an
 [Immich](https://immich.app/) album containing the new photos. Set these
 environment variables on the media VM (e.g. in `~/.bashrc`):
 
-| Variable           | Required | Description                                            |
-| ------------------ | -------- | ------------------------------------------------------ |
-| `IMMICH_API_KEY`   | Yes      | API key (create in Immich under Account Settings)      |
-| `IMMICH_LIBRARY_ID`| Yes      | External library ID to rescan                          |
-| `IMMICH_API_URL`   | Yes      | Immich server URL (e.g. `http://localhost:2283`)       |
-| `IMMICH_SHARE_USER`| No       | Immich username to share created albums with           |
-| `PUSHOVER_USER_KEY`| No       | Pushover user key for notifications                    |
-| `PUSHOVER_APP_TOKEN`| No      | Pushover application API token                         |
+| Variable             | Required | Description                                       |
+| -------------------- | -------- | ------------------------------------------------- |
+| `IMMICH_API_KEY`     | Yes      | API key (create in Immich under Account Settings) |
+| `IMMICH_LIBRARY_ID`  | Yes      | External library ID to rescan                     |
+| `IMMICH_API_URL`     | Yes      | Immich server URL (e.g. `http://localhost:2283`)  |
+| `IMMICH_SHARE_USER`  | No       | Immich username to share created albums with      |
+| `PUSHOVER_USER_KEY`  | No       | Pushover user key for notifications               |
+| `PUSHOVER_APP_TOKEN` | No       | Pushover application API token                    |
 
 If all three required variables are set and the output directory is the
 default (`/mnt/nfs/photos/reference`), `epm` will:
