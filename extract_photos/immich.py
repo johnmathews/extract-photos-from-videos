@@ -37,11 +37,22 @@ def trigger_scan(api_url: str, api_key: str, library_id: str) -> None:
 
 
 def poll_for_assets(
-    api_url: str, api_key: str, asset_path: str, timeout: int = 300
+    api_url: str,
+    api_key: str,
+    asset_path: str,
+    expected_count: int = 1,
+    timeout: int = 300,
 ) -> list[dict]:
-    """Poll Immich until assets matching asset_path appear, or timeout."""
+    """Poll Immich until expected number of assets appear, or timeout.
+
+    Keeps polling until at least expected_count assets matching asset_path
+    are found, or two consecutive polls return the same count (scan finished).
+    """
     url = f"{api_url}/api/search/metadata"
     deadline = time.monotonic() + timeout
+    prev_count = 0
+    stable_polls = 0
+    assets = []
     while True:
         result = immich_request(
             url, api_key, method="POST", data={"originalPath": asset_path}
@@ -51,10 +62,18 @@ def poll_for_assets(
             if isinstance(result, dict)
             else []
         )
-        if assets:
+        if len(assets) >= expected_count:
             return assets
+        # If count stabilised across two polls, the scan is done
+        if assets and len(assets) == prev_count:
+            stable_polls += 1
+            if stable_polls >= 2:
+                return assets
+        else:
+            stable_polls = 0
+        prev_count = len(assets)
         if time.monotonic() >= deadline:
-            return []
+            return assets
         time.sleep(5)
 
 
@@ -90,10 +109,11 @@ def find_or_create_album(api_url: str, api_key: str, album_name: str) -> str:
 
 def add_assets_to_album(
     api_url: str, api_key: str, album_id: str, asset_ids: list[str]
-) -> None:
-    """Add assets to an album."""
+) -> list[dict]:
+    """Add assets to an album. Returns per-asset result list from Immich."""
     url = f"{api_url}/api/albums/{album_id}/assets"
-    immich_request(url, api_key, method="PUT", data={"ids": asset_ids})
+    result = immich_request(url, api_key, method="PUT", data={"ids": asset_ids})
+    return result if isinstance(result, list) else []
 
 
 def find_user(api_url: str, api_key: str, username: str) -> str | None:
@@ -264,8 +284,11 @@ def main() -> None:
 
     # 2. Poll for new assets
     asset_search_path = args.asset_path.rstrip("/") + "/"
-    print("  Waiting for assets...     ", end="", flush=True)
-    assets = poll_for_assets(api_url, args.api_key, asset_search_path)
+    expected = (args.photo_count + 1) if args.photo_count else 1
+    print(f"  Waiting for assets...     ", end="", flush=True)
+    assets = poll_for_assets(
+        api_url, args.api_key, asset_search_path, expected_count=expected
+    )
     if not assets:
         print("none found")
         print(
@@ -274,6 +297,11 @@ def main() -> None:
         )
         sys.exit(0)
     print(f"{len(assets)} found")
+    if args.photo_count and len(assets) < expected:
+        print(
+            f"  Warning: expected {expected} assets, found {len(assets)}"
+            " (library scan may still be running)"
+        )
 
     # 3. Order assets: video first, photos by timestamp
     print("  Ordering assets...        ", end="", flush=True)
@@ -317,9 +345,35 @@ def main() -> None:
     # 6. Add assets to album
     print(f"  Adding {len(asset_ids)} asset(s)...     ", end="", flush=True)
     try:
-        add_assets_to_album(api_url, args.api_key, album_id, asset_ids)
-        print("done")
-        notification_parts.append(f"{len(asset_ids)} assets added")
+        results = add_assets_to_album(api_url, args.api_key, album_id, asset_ids)
+        added = sum(1 for r in results if r.get("success"))
+        dupes = sum(1 for r in results if r.get("error") == "duplicate")
+        failed = [
+            r for r in results
+            if not r.get("success") and r.get("error") != "duplicate"
+        ]
+        if failed:
+            print(f"{added} added, {len(failed)} failed")
+            # Retry after a brief delay — assets may still be processing
+            time.sleep(5)
+            failed_ids = [r["id"] for r in failed]
+            print(f"  Retrying {len(failed_ids)} asset(s)... ", end="", flush=True)
+            retry = add_assets_to_album(api_url, args.api_key, album_id, failed_ids)
+            retry_ok = sum(1 for r in retry if r.get("success"))
+            added += retry_ok
+            still_bad = len(failed_ids) - retry_ok
+            if still_bad:
+                print(f"{retry_ok} added, {still_bad} still failed")
+                errors = {r.get("error", "unknown") for r in retry if not r.get("success")}
+                print(f"  Failure reasons: {', '.join(errors)}", file=sys.stderr)
+            else:
+                print(f"all {retry_ok} added")
+        else:
+            msg = f"done ({added} new"
+            if dupes:
+                msg += f", {dupes} already in album"
+            print(msg + ")")
+        notification_parts.append(f"{added + dupes} assets in album")
     except urllib.error.URLError as e:
         print("failed")
         print(f"Error: failed to add assets to album: {e}", file=sys.stderr)

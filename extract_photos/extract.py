@@ -246,8 +246,9 @@ def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
 
         # Map low-res frame position back to original video timestamp
         timestamp_sec = current_frame / lowres_fps if lowres_fps > 0 else 0
+        # Use truncation (not rounding) so tenths stays 0-9
         total_seconds = int(timestamp_sec)
-        tenths = int(round((timestamp_sec - total_seconds) * 10))
+        tenths = int((timestamp_sec - total_seconds) * 10)
         minutes, seconds = divmod(total_seconds, 60)
         if tenths > 0:
             time_str = f"{minutes}m{seconds:02d}.{tenths}s"
