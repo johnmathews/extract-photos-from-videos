@@ -78,6 +78,13 @@ for arg in "$@"; do
   esac
 done
 
+# Read input_file from stdin if piped and not provided as argument
+if [[ -z "$VIDEO" ]] && ! [ -t 0 ]; then
+  read -r VIDEO
+  # Reattach stdin to /dev/null so later ssh -tt doesn't get a dead pipe
+  exec < /dev/null
+fi
+
 if [[ -z "$VIDEO" ]]; then
   echo "Error: input_file is required." >&2
   echo >&2
