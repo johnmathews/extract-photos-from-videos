@@ -7,7 +7,9 @@ usage() {
   cat <<USAGE
 Usage: epm input_file=VIDEO [output_dir=DIR] [options]
 
-Extract photos from a video file on the media VM.
+------------------------------------------------
+Extract Photos from Movie file, on the media VM.
+------------------------------------------------
 
 Arguments:
   input_file=PATH    Path to the video file on the media VM
@@ -82,7 +84,7 @@ done
 if [[ -z "$VIDEO" ]] && ! [ -t 0 ]; then
   read -r VIDEO
   # Reattach stdin to /dev/null so later ssh -tt doesn't get a dead pipe
-  exec < /dev/null
+  exec </dev/null
 fi
 
 if [[ -z "$VIDEO" ]]; then
