@@ -1,49 +1,55 @@
 # Photograph Extractor
 
-Extract still photographs from video files. The tool detects frames that display
-a photograph with a solid-color border (e.g. white), deduplicates them, and
-saves each as a JPEG.
+Extract still photographs from video files. The tool detects frames that display a photograph with a solid-color border
+(e.g. white), deduplicates them, and saves each as a JPEG.
 
-Built for studying other photographers' work from YouTube videos -- view photos
-at your own pace, in any order, and annotate them.
+Built for studying other photographers' work from YouTube videos -- view photos at your own pace, in any order, and
+annotate them.
 
 ## Known issues
 
-### Movie playback in Immich
+### 1. Movie playback in Immich
 
-Immich supports MKV containers, but the codec matters for playback.
-yt-dlp typically downloads AV1+Opus in MKV — AV1 decoding needs server-side transcoding in Immich which may not be configured.
-The safest target is H.264+AAC in MP4 and ensuring that the movie file copied into the photos/reference/ subdirectory conforms to this requirement still needs to be implemented.
+Immich supports MKV containers, but the codec matters for playback. yt-dlp typically downloads AV1+Opus in MKV — AV1
+decoding needs server-side transcoding in Immich which may not be configured. The safest target is H.264+AAC in MP4 and
+ensuring that the movie file copied into the photos/reference/ subdirectory conforms to this requirement still needs to
+be implemented.
 
-### Some photos are not extracted from a video
+### 2. Some photos are not extracted from a video
 
 Most are, but some are not. I dont know why. need to investigate.
+
+### 3. Screenshots are not photos
+
+It is common in photography videos on youtube to have an ad segment where some screenshots and UI screens are shown.
+these typically have white borders like a photo, but should be excluded. Lets think about possible solutions to this.
+
+### 4. Black screens or white screens are not photos
+
+A screen that is entirely one color (often all black) is not a photo and should not be extracted. A similarity threshold
+might also be necessary to avoid transition screens that have a slight gradient.
 
 ## How it works
 
 1. Point the tool at a directory containing one or more video files.
 2. Each video goes through a three-phase pipeline:
    - **Transcode** — ffmpeg creates a 320px-wide low-res copy for fast scanning.
-   - **Scan** — The low-res copy is scanned single-threaded at a configurable
-     interval (default: every 0.5 seconds). Frames with uniform borders are
-     detected and deduplicated using perceptual hashing.
-   - **Extract** — Only the frames identified as photos are decoded from the
-     original full-resolution video, trimmed, validated, and saved.
+   - **Scan** — The low-res copy is scanned single-threaded at a configurable interval (default: every 0.5 seconds).
+     Frames with uniform borders are detected and deduplicated using perceptual hashing.
+   - **Extract** — Only the frames identified as photos are decoded from the original full-resolution video, trimmed,
+     validated, and saved.
 3. A frame is extracted as a photo when:
    - It has uniform-color borders on all four sides.
-   - It is sufficiently different from the previous extracted photo (perceptual
-     hash deduplication).
+   - It is sufficiently different from the previous extracted photo (perceptual hash deduplication).
    - The bordered content is at least 1000x1000 pixels.
-4. Borders are trimmed and replaced with a clean border matching the original
-   color.
+4. Borders are trimmed and replaced with a clean border matching the original color.
 5. Output is organized into per-video subdirectories.
 
 Supported video formats: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`.
 
 ## Setup
 
-Requires Python >= 3.13, [uv](https://github.com/astral-sh/uv), and
-[ffmpeg](https://ffmpeg.org/).
+Requires Python >= 3.13, [uv](https://github.com/astral-sh/uv), and [ffmpeg](https://ffmpeg.org/).
 
 ```bash
 git clone https://github.com/johnmathews/extract-photos-from-videos.git
@@ -84,8 +90,7 @@ uv run python extract_photos/main.py ~/Videos -s 1.0 -t 0.95
 
 ### Shell function
 
-To run from anywhere without activating the virtualenv, add to your
-`~/.zshrc` or `~/.bashrc`:
+To run from anywhere without activating the virtualenv, add to your `~/.zshrc` or `~/.bashrc`:
 
 ```bash
 extract_photos() {
@@ -109,11 +114,9 @@ INPUT_DIR/
       ...
 ```
 
-Each photo filename includes the video name and the timestamp where it was
-found. Whole-second timestamps use the format `5m04s`; sub-second timestamps
-include a decimal (`1m23.5s`) to avoid filename collisions when `step_time` is
-less than 1 second. A single log file per video records detailed extraction
-decisions.
+Each photo filename includes the video name and the timestamp where it was found. Whole-second timestamps use the format
+`5m04s`; sub-second timestamps include a decimal (`1m23.5s`) to avoid filename collisions when `step_time` is less than 1
+second. A single log file per video records detailed extraction decisions.
 
 ## Testing
 
@@ -125,26 +128,21 @@ uv run pytest tests/ -v
 bash tests/test_epm.sh
 ```
 
-The Python tests use synthetic numpy arrays for image-processing logic, and
-mocked HTTP responses for the Immich integration. The tested pure functions
-(`make_safe_folder_name`, `is_valid_photo`, `calculate_ssim`,
-`detect_almost_uniform_borders`, `trim_and_add_border`) are where the core
-detection logic lives. The Immich module (`immich.py`) is tested at 92%
-coverage, covering the HTTP wrapper, polling, album creation, asset addition,
-user lookup, sharing, and the CLI orchestration.
+The Python tests use synthetic numpy arrays for image-processing logic, and mocked HTTP responses for the Immich
+integration. The tested pure functions (`make_safe_folder_name`, `is_valid_photo`, `calculate_ssim`,
+`detect_almost_uniform_borders`, `trim_and_add_border`) are where the core detection logic lives. The Immich module
+(`immich.py`) is tested at 92% coverage, covering the HTTP wrapper, polling, album creation, asset addition, user lookup,
+sharing, and the CLI orchestration.
 
-The untested code (`transcode_lowres`, `scan_for_photos`,
-`extract_fullres_frames`, `extract_photos_from_video`, `batch_processor`,
-`main`) is orchestration -- transcoding, scanning, seeking, and file I/O.
-Testing that with real video files would be an integration test: slow, requiring
-test fixtures, and mostly validating that OpenCV and ffmpeg work rather than
-project logic.
+The untested code (`transcode_lowres`, `scan_for_photos`, `extract_fullres_frames`, `extract_photos_from_video`,
+`batch_processor`, `main`) is orchestration -- transcoding, scanning, seeking, and file I/O. Testing that with real video
+files would be an integration test: slow, requiring test fixtures, and mostly validating that OpenCV and ffmpeg work
+rather than project logic.
 
 ## Remote extraction (`epm`)
 
-`bin/epm` is a shell script that SSHes into a remote machine and runs the
-extraction tool on a single video file. The repository and its dependencies are
-auto-installed on the remote on first run and auto-updated on subsequent runs.
+`bin/epm` is a shell script that SSHes into a remote machine and runs the extraction tool on a single video file. The
+repository and its dependencies are auto-installed on the remote on first run and auto-updated on subsequent runs.
 
 ### Prerequisites
 
@@ -152,16 +150,14 @@ auto-installed on the remote on first run and auto-updated on subsequent runs.
 
 ### Installation
 
-Symlink the script into a directory on your PATH so it can be run from any
-shell:
+Symlink the script into a directory on your PATH so it can be run from any shell:
 
 ```bash
 ln -s "$(pwd)/bin/epm" /usr/local/bin/epm
 ```
 
-Run this from the root of the repository. After that, `epm` is available
-globally. The symlink points back to the repo, so updates to the script take
-effect immediately.
+Run this from the root of the repository. After that, `epm` is available globally. The symlink points back to the repo,
+so updates to the script take effect immediately.
 
 ### Usage
 
@@ -194,9 +190,8 @@ epm input_file="/data/videos/video-[abc123].mkv" output_dir=/data/photos
 
 ### Immich integration
 
-After extracting photos, `epm` can automatically create an
-[Immich](https://immich.app/) album containing the new photos. Set these
-environment variables on the media VM (e.g. in `~/.bashrc`):
+After extracting photos, `epm` can automatically create an [Immich](https://immich.app/) album containing the new photos.
+Set these environment variables on the media VM (e.g. in `~/.bashrc`):
 
 | Variable             | Required | Description                                       |
 | -------------------- | -------- | ------------------------------------------------- |
@@ -207,24 +202,21 @@ environment variables on the media VM (e.g. in `~/.bashrc`):
 | `PUSHOVER_USER_KEY`  | No       | Pushover user key for notifications               |
 | `PUSHOVER_APP_TOKEN` | No       | Pushover application API token                    |
 
-If all three required variables are set and the output directory is the
-default (`/mnt/nfs/photos/reference`), `epm` will:
+If all three required variables are set and the output directory is the default (`/mnt/nfs/photos/reference`), `epm`
+will:
 
 1. Trigger a library rescan so Immich indexes the new files.
 2. Wait for the new assets to appear (polls every 5s, up to 5 minutes).
-3. Order assets: video first, then photos sorted by their timestamp in the
-   video.
-4. Set `dateTimeOriginal` on each asset so Immich's date sort matches the
-   video timeline. The video gets its YouTube upload date (from embedded
-   metadata) or the file's download time as a fallback. Photos get that base
-   date plus their offset in the video.
-5. Parse the video filename into an album name (e.g.
-   `Willem Verbeeck - Shooting Los Angeles on 8x10 Film`).
+3. Order assets: video first, then photos sorted by their timestamp in the video.
+4. Set `dateTimeOriginal` on each asset so Immich's date sort matches the video timeline. The video gets its YouTube
+   upload date (from embedded metadata) or the file's download time as a fallback. Photos get that base date plus their
+   offset in the video.
+5. Parse the video filename into an album name (e.g. `Willem Verbeeck - Shooting Los Angeles on 8x10 Film`).
 6. Create a shared album (or reuse an existing one with the same name).
 7. Add the ordered assets to the album.
 8. If `IMMICH_SHARE_USER` is set, share the album with that user as an editor.
-9. If `PUSHOVER_USER_KEY` and `PUSHOVER_APP_TOKEN` are set, send a push
-   notification with the album name and extraction summary.
+9. If `PUSHOVER_USER_KEY` and `PUSHOVER_APP_TOKEN` are set, send a push notification with the album name and extraction
+   summary.
 
-If any required variables are unset, the reason is shown in the output. To
-disable the integration entirely, pass `update_immich=false`.
+If any required variables are unset, the reason is shown in the output. To disable the integration entirely, pass
+`update_immich=false`.
