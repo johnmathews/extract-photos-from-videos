@@ -319,8 +319,8 @@ def main() -> None:
             path = asset.get("originalPath", "")
             ts = parse_video_timestamp(path)
             if ts is None:
-                # Video asset — use the real upload/download date
-                dt = base_date
+                # Video asset — 1s before base so it sorts before the 0m00s photo
+                dt = base_date - timedelta(seconds=1)
             else:
                 # Photo asset — base date + offset from position in video
                 dt = base_date + timedelta(seconds=ts)
@@ -331,11 +331,18 @@ def main() -> None:
         print("failed")
         print(f"Warning: failed to set asset dates: {e}", file=sys.stderr)
 
-    # 5. Create or find album
+    # 5. Create or find album, set sort order to oldest first
     print(f"  Album: {album_name}")
     print("  Creating album...         ", end="", flush=True)
     try:
         album_id = find_or_create_album(api_url, args.api_key, album_name)
+        # Set album sort to oldest first so video appears first, photos in order
+        immich_request(
+            f"{api_url}/api/albums/{album_id}",
+            args.api_key,
+            method="PATCH",
+            data={"order": "asc"},
+        )
         print("done")
     except urllib.error.URLError as e:
         print("failed")

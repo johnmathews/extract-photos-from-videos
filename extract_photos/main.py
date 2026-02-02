@@ -24,7 +24,7 @@ def main():
         "-s",
         "--step_time",
         type=float,
-        default=0.5,
+        default=0.9,
         help="Time interval (in seconds) to skip between frames.",
     )
     parser.add_argument(
