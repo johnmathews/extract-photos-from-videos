@@ -246,8 +246,13 @@ def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
 
         # Map low-res frame position back to original video timestamp
         timestamp_sec = current_frame / lowres_fps if lowres_fps > 0 else 0
-        minutes, seconds = divmod(int(timestamp_sec), 60)
-        time_str = f"{minutes}m{seconds:02d}s"
+        total_seconds = int(timestamp_sec)
+        tenths = int(round((timestamp_sec - total_seconds) * 10))
+        minutes, seconds = divmod(total_seconds, 60)
+        if tenths > 0:
+            time_str = f"{minutes}m{seconds:02d}.{tenths}s"
+        else:
+            time_str = f"{minutes}m{seconds:02d}s"
 
         if detect_almost_uniform_borders(frame):
             frame_hash = compute_frame_hash(frame)

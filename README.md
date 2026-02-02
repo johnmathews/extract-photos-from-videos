@@ -89,6 +89,7 @@ INPUT_DIR/
   extracted_photos/
     video-name/
       video-name_0m30s.jpg
+      video-name_1m23.5s.jpg
       video-name_2m15s.jpg
       logs/
         video-name.log
@@ -97,7 +98,10 @@ INPUT_DIR/
 ```
 
 Each photo filename includes the video name and the timestamp where it was
-found. A single log file per video records detailed extraction decisions.
+found. Whole-second timestamps use the format `5m04s`; sub-second timestamps
+include a decimal (`1m23.5s`) to avoid filename collisions when `step_time` is
+less than 1 second. A single log file per video records detailed extraction
+decisions.
 
 ## Testing
 
@@ -196,12 +200,19 @@ default (`/mnt/nfs/photos/reference`), `epm` will:
 
 1. Trigger a library rescan so Immich indexes the new files.
 2. Wait for the new assets to appear (polls every 5s, up to 5 minutes).
-3. Parse the video filename into an album name (e.g.
+3. Order assets: video first, then photos sorted by their timestamp in the
+   video.
+4. Set `dateTimeOriginal` on each asset so Immich's date sort matches the
+   video timeline. The video gets its YouTube upload date (from embedded
+   metadata) or the file's download time as a fallback. Photos get that base
+   date plus their offset in the video.
+5. Parse the video filename into an album name (e.g.
    `Willem Verbeeck - Shooting Los Angeles on 8x10 Film`).
-4. Create a shared album (or reuse an existing one with the same name).
-5. Add the new assets to the album.
-6. If `IMMICH_SHARE_USER` is set, share the album with that user as an editor.
-7. If `PUSHOVER_USER_KEY` and `PUSHOVER_APP_TOKEN` are set, send a push notification with the album name and extraction summary.
+6. Create a shared album (or reuse an existing one with the same name).
+7. Add the ordered assets to the album.
+8. If `IMMICH_SHARE_USER` is set, share the album with that user as an editor.
+9. If `PUSHOVER_USER_KEY` and `PUSHOVER_APP_TOKEN` are set, send a push
+   notification with the album name and extraction summary.
 
 If any required variables are unset, the reason is shown in the output. To
 disable the integration entirely, pass `update_immich=false`.

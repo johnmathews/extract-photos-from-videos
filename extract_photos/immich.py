@@ -2,12 +2,15 @@
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -132,6 +135,90 @@ def send_pushover(user_key: str, app_token: str, title: str, message: str) -> No
         resp.read()
 
 
+def get_video_date(video_path: str) -> datetime:
+    """Get the video's original date: YouTube upload date from metadata, or file mtime.
+
+    yt-dlp embeds the upload date as a DATE tag in YYYYMMDD format.
+    Falls back to the file's modification time (i.e. download time).
+    Returns a timezone-aware UTC datetime.
+    """
+    # Try ffprobe to get upload date from embedded metadata
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
+                "-show_format",
+                video_path,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            tags = data.get("format", {}).get("tags", {})
+            # yt-dlp embeds upload date as DATE tag in YYYYMMDD format
+            date_val = tags.get("DATE") or tags.get("date") or tags.get("upload_date")
+            if date_val and len(date_val) >= 8:
+                return datetime(
+                    int(date_val[:4]),
+                    int(date_val[4:6]),
+                    int(date_val[6:8]),
+                    tzinfo=timezone.utc,
+                )
+    except (FileNotFoundError, ValueError, KeyError, json.JSONDecodeError):
+        pass
+
+    # Fall back to file modification time (download time)
+    try:
+        mtime = os.path.getmtime(video_path)
+        return datetime.fromtimestamp(mtime, tz=timezone.utc)
+    except OSError:
+        return datetime(2000, 1, 1, tzinfo=timezone.utc)
+
+
+def parse_video_timestamp(filename: str) -> float | None:
+    """Extract seconds from a filename like '_5m04s.jpg' or '_1m23.5s.jpg'.
+
+    Returns total seconds as a float, or None for non-matching files (e.g. videos).
+    """
+    match = re.search(r"_(\d+)m(\d+(?:\.\d+)?)s\.jpg$", filename)
+    if not match:
+        return None
+    minutes = int(match.group(1))
+    seconds = float(match.group(2))
+    return minutes * 60 + seconds
+
+
+def update_asset_date(
+    api_url: str, api_key: str, asset_id: str, date_str: str
+) -> None:
+    """Set dateTimeOriginal on an Immich asset via PUT /api/assets/{id}."""
+    url = f"{api_url}/api/assets/{asset_id}"
+    immich_request(url, api_key, method="PUT", data={"dateTimeOriginal": date_str})
+
+
+def order_assets(assets: list[dict]) -> list[dict]:
+    """Separate video and photo assets, sort photos by timestamp.
+
+    Returns ordered list: video(s) first, then photos in chronological order.
+    """
+    videos = []
+    photos = []
+    for asset in assets:
+        path = asset.get("originalPath", "")
+        if path.lower().endswith((".mkv", ".mp4", ".avi", ".webm", ".mov")):
+            videos.append(asset)
+        else:
+            photos.append(asset)
+
+    photos.sort(key=lambda a: parse_video_timestamp(a.get("originalPath", "")) or 0)
+    return videos + photos
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Immich integration: scan, create album, add assets, share"
@@ -186,10 +273,37 @@ def main() -> None:
             file=sys.stderr,
         )
         sys.exit(0)
-    asset_ids = [a["id"] for a in assets]
-    print(f"{len(asset_ids)} found")
+    print(f"{len(assets)} found")
 
-    # 3. Create or find album
+    # 3. Order assets: video first, photos by timestamp
+    print("  Ordering assets...        ", end="", flush=True)
+    ordered = order_assets(assets)
+    asset_ids = [a["id"] for a in ordered]
+    print("done")
+
+    # 4. Set dateTimeOriginal so Immich sorts by video timeline
+    video_path = os.path.join(args.asset_path, args.video_filename)
+    base_date = get_video_date(video_path)
+    print(f"  Video date: {base_date.strftime('%Y-%m-%d')}")
+    print("  Setting asset dates...    ", end="", flush=True)
+    try:
+        for asset in ordered:
+            path = asset.get("originalPath", "")
+            ts = parse_video_timestamp(path)
+            if ts is None:
+                # Video asset — use the real upload/download date
+                dt = base_date
+            else:
+                # Photo asset — base date + offset from position in video
+                dt = base_date + timedelta(seconds=ts)
+            date_str = dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+            update_asset_date(api_url, args.api_key, asset["id"], date_str)
+        print("done")
+    except urllib.error.URLError as e:
+        print("failed")
+        print(f"Warning: failed to set asset dates: {e}", file=sys.stderr)
+
+    # 5. Create or find album
     print(f"  Album: {album_name}")
     print("  Creating album...         ", end="", flush=True)
     try:
@@ -200,7 +314,7 @@ def main() -> None:
         print(f"Error: failed to create/find album: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # 4. Add assets to album
+    # 6. Add assets to album
     print(f"  Adding {len(asset_ids)} asset(s)...     ", end="", flush=True)
     try:
         add_assets_to_album(api_url, args.api_key, album_id, asset_ids)
@@ -211,7 +325,7 @@ def main() -> None:
         print(f"Error: failed to add assets to album: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # 5. Share album if user specified
+    # 7. Share album if user specified
     if not args.share_user:
         print("  Sharing...                not configured (IMMICH_SHARE_USER not set)")
     else:
@@ -232,7 +346,7 @@ def main() -> None:
             print("failed")
             print(f"Error: failed to share album: {e}", file=sys.stderr)
 
-    # 6. Send Pushover notification if configured
+    # 8. Send Pushover notification if configured
     if args.pushover_user_key and args.pushover_app_token:
         print("  Sending notification...   ", end="", flush=True)
         try:
