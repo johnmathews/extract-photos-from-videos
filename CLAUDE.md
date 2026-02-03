@@ -20,6 +20,9 @@ uv run python -m extract_photos.main "/path/to/videos" -s 1.0 -b 10 --min-photo-
 # Run on remote media VM (single video)
 epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
 
+# Run type checking
+uv run pyright
+
 # Run Python tests (fast unit tests only)
 uv run pytest tests/
 
@@ -108,4 +111,6 @@ opencv-python (video/image I/O), numpy.
 
 ## Code style
 
-Line length: 120 (configured for black, flake8, pyright in pyproject.toml).
+Line length: 120 (configured for black, flake8 in pyproject.toml). All functions have type annotations; pyright is
+configured in standard mode (`uv run pyright`). Numpy/opencv stub false positives are suppressed with inline
+`# type: ignore` comments.
