@@ -207,9 +207,16 @@ class TestRejectionReason:
     def test_too_small(self):
         rng = np.random.RandomState(42)
         img = rng.randint(0, 256, (500, 500, 3), dtype=np.uint8)
-        reason = _rejection_reason(img)
+        # 500x500 = 250K pixels, set threshold above that
+        reason = _rejection_reason(img, min_photo_area=500_000)
         assert reason is not None
         assert "too small" in reason
+
+    def test_size_check_disabled_by_default(self):
+        rng = np.random.RandomState(42)
+        img = rng.randint(0, 256, (100, 100, 3), dtype=np.uint8)
+        # With default min_photo_area=0, size check is skipped
+        assert _rejection_reason(img) is None
 
     def test_near_uniform_rejected(self):
         img = np.zeros((1200, 1200, 3), dtype=np.uint8)

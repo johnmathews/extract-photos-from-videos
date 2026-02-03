@@ -34,6 +34,12 @@ def main():
         default=5,
         help="Border size in pixels to add around extracted photos (default: 5).",
     )
+    parser.add_argument(
+        "--min-photo-pct",
+        type=int,
+        default=25,
+        help="Minimum photo area as %% of video frame area (default: 25). Photos smaller than this are rejected.",
+    )
 
     args = parser.parse_args()
 
@@ -58,6 +64,7 @@ def main():
         output_directory=output_directory,
         step_time=args.step_time,
         border_px=args.border_px,
+        min_photo_pct=args.min_photo_pct,
     )
 
 

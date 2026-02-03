@@ -14,3 +14,6 @@ wheels/
 htmlcov/
 
 .DS_Store
+
+# Dont include the test video
+test-video/

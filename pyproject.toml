@@ -25,7 +25,8 @@ ignore = ["E203"]  # Ignore 'whitespace before ":"'
 line-length = 120
 
 [tool.pytest.ini_options]
-addopts = "--cov=extract_photos --cov-report=term-missing --cov-report=html"
+addopts = "--cov=extract_photos --cov-report=term-missing --cov-report=html -m 'not slow'"
+markers = ["slow: marks tests as slow (run with -m slow)"]
 
 [tool.coverage.run]
 source = ["extract_photos"]

@@ -18,7 +18,8 @@ from extract_photos.display_progress import build_progress_bar, format_time, pri
 from extract_photos.utils import is_valid_photo, make_safe_folder_name, setup_logger
 
 HASH_SIZE = 8
-HASH_DIFF_THRESHOLD = 10  # hamming distance out of 64 bits
+HASH_DIFF_THRESHOLD = 10  # hamming distance out of 64 bits — for first-detection
+HASH_STEP_THRESHOLD = 3  # step-to-step threshold — same photo has distance 0-2
 
 
 def _ts():
@@ -264,6 +265,7 @@ def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     prev_photo_hash = None
+    prev_step_hash = None
     photo_timestamps = []
     last_progress_time = 0.0
     wall_start = time.monotonic()
@@ -295,13 +297,29 @@ def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
 
         if detect_almost_uniform_borders(frame) and _is_near_uniform(frame) is None:
             frame_hash = compute_frame_hash(frame)
-            is_new = (
+            # Detect new photo by comparing against the previous step's hash.
+            # Consecutive frames of the same photo have distance 0-2; any
+            # larger change means the video transitioned to a different photo.
+            # Also compare against the last *recorded* photo hash for the
+            # initial detection (prev_step_hash is None on first photo frame).
+            step_changed = (
+                prev_step_hash is not None
+                and hash_difference(frame_hash, prev_step_hash) > HASH_STEP_THRESHOLD
+            )
+            is_new_photo = (
                 prev_photo_hash is None
+                or step_changed
                 or hash_difference(frame_hash, prev_photo_hash) > HASH_DIFF_THRESHOLD
             )
-            if is_new:
+            if is_new_photo:
                 photo_timestamps.append((timestamp_sec, time_str))
                 prev_photo_hash = frame_hash
+            prev_step_hash = frame_hash
+        else:
+            # Not a photo frame — reset both hashes so the next photo
+            # is always detected as new.
+            prev_photo_hash = None
+            prev_step_hash = None
 
         cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + frame_step)
 
@@ -342,10 +360,10 @@ def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
     return photo_timestamps
 
 
-def _rejection_reason(image):
+def _rejection_reason(image, min_photo_area=0):
     """Return a rejection reason string, or None if the image is valid."""
     h, w = image.shape[:2]
-    if h < 1000 or w < 1000:
+    if min_photo_area > 0 and w * h < min_photo_area:
         return f"too small ({w}x{h})"
     reason = _is_near_uniform(image)
     if reason:
@@ -357,9 +375,10 @@ def _rejection_reason(image):
 
 
 def get_video_metadata(video_file):
-    """Get video fps and duration using ffprobe.
+    """Get video fps, duration, and frame dimensions using ffprobe.
 
-    Returns (fps, duration_sec) tuple. Raises RuntimeError if ffprobe fails.
+    Returns (fps, duration_sec, width, height) tuple.
+    Raises RuntimeError if ffprobe fails.
     """
     cmd = [
         "ffprobe",
@@ -411,11 +430,14 @@ def get_video_metadata(video_file):
     elif "nb_frames" in stream and fps > 0:
         duration_sec = int(stream["nb_frames"]) / fps
 
-    return fps, duration_sec
+    width = int(stream.get("width", 0))
+    height = int(stream.get("height", 0))
+
+    return fps, duration_sec, width, height
 
 
 def extract_fullres_frames(
-    video_file, output_folder, photo_timestamps, filename, logger, border_px=5
+    video_file, output_folder, photo_timestamps, filename, logger, border_px=5, min_photo_area=0
 ):
     """Extract full-resolution frames at the given timestamps from the original video.
 
@@ -464,7 +486,7 @@ def extract_fullres_frames(
                 continue
 
             trimmed_frame = trim_and_add_border(frame, border_px=border_px)
-            reason = _rejection_reason(trimmed_frame)
+            reason = _rejection_reason(trimmed_frame, min_photo_area=min_photo_area)
             if reason is None:
                 file_name = f"{filename_safe}_{time_str}.jpg"
                 photo_path = os.path.join(output_folder, file_name)
@@ -573,12 +595,16 @@ def transcode_for_playback(video_file, output_dir):
 
 
 def extract_photos_from_video(
-    video_file, output_folder, step_time, filename, border_px=5
+    video_file, output_folder, step_time, filename, border_px=5, min_photo_pct=25
 ):
     """Extract photos from a video using a three-phase pipeline:
     1. Transcode to low-res temp file
     2. Scan low-res for photo timestamps
     3. Extract full-res frames at those timestamps
+
+    min_photo_pct: minimum photo area as a percentage of total frame area.
+        Photos smaller than this fraction of the video frame are rejected.
+        Default 25 (i.e. 25%).
     """
     os.makedirs(output_folder, exist_ok=True)
 
@@ -590,7 +616,9 @@ def extract_photos_from_video(
     logger = setup_logger(log_file)
 
     # Get video metadata via ffprobe (works with any codec including AV1)
-    fps, video_duration_sec = get_video_metadata(video_file)
+    fps, video_duration_sec, frame_w, frame_h = get_video_metadata(video_file)
+    frame_area = frame_w * frame_h
+    min_photo_area = int(frame_area * min_photo_pct / 100) if frame_area > 0 else 0
 
     logger.info(f"File: {filename}")
     logger.info(
@@ -625,6 +653,7 @@ def extract_photos_from_video(
                 filename,
                 logger,
                 border_px=border_px,
+                min_photo_area=min_photo_area,
             )
             extract_elapsed = format_time(time.monotonic() - extract_start)
         else:

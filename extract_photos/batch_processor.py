@@ -10,6 +10,7 @@ def process_videos_in_directory(
     output_directory: str,
     step_time: int,
     border_px: int = 5,
+    min_photo_pct: int = 25,
     **kwargs,
 ):
     """
@@ -62,6 +63,7 @@ def process_videos_in_directory(
             step_time=step_time,
             filename=filename,
             border_px=border_px,
+            min_photo_pct=min_photo_pct,
         )
 
     print(
