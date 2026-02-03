@@ -23,7 +23,12 @@ def build_progress_bar(pct: float, width: int = 30) -> str:
 
 
 def print_scan_progress(
-    filename: str, pct: float, video_pos_sec: float, video_duration_sec: float, photo_count: int, eta_str: str
+    filename: str,
+    pct: float,
+    video_pos_sec: float,
+    video_duration_sec: float,
+    photo_count: int,
+    eta_str: str,
 ) -> None:
     """
     Print a 3-line in-place progress display for the scanning phase.
@@ -35,7 +40,7 @@ def print_scan_progress(
     bar = build_progress_bar(pct)
     pos_str = f"{format_time(video_pos_sec)} / {format_time(video_duration_sec)}"
 
-    sys.stdout.write(f"\033[3A")
+    sys.stdout.write("\033[3A")
     sys.stdout.write(f"\033[K\033[1m{filename}\033[0m\n")
     sys.stdout.write(f"\033[K {bar}  {pct:5.1f}%   {eta_str}\n")
     sys.stdout.write(f"\033[K {pos_str:28s}{photo_count} photos\n")
