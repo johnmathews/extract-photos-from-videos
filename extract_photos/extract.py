@@ -486,7 +486,10 @@ def transcode_for_playback(video_file, output_dir):
     """Transcode video to H.264/MP4 if needed for Immich playback compatibility.
 
     Checks the video codec via ffprobe. If already H.264 or HEVC, copies the
-    file directly. Otherwise, transcodes to H.264/AAC in MP4 with a progress bar.
+    file directly. Otherwise, transcodes to H.264/AAC in MP4 with a progress
+    bar. The transcode is optimized for fast encoding over quality — capped at
+    1080p, CRF 28, preset faster — since the original file is preserved
+    elsewhere and this copy is just for browsing in Immich.
 
     All progress output goes to stderr so callers can capture the return value
     on stdout.
@@ -527,8 +530,9 @@ def transcode_for_playback(video_file, output_dir):
 
     cmd = [
         "ffmpeg", "-i", video_file,
-        "-c:v", "libx264", "-crf", "18", "-preset", "medium",
-        "-c:a", "aac", "-b:a", "192k",
+        "-vf", "scale=-2:'min(1080,ih)'",
+        "-c:v", "libx264", "-crf", "28", "-preset", "faster",
+        "-c:a", "aac", "-b:a", "128k",
         "-map_metadata", "0",
         "-progress", "pipe:1", "-nostats",
         out_path, "-y",

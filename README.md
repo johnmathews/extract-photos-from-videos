@@ -10,8 +10,9 @@ annotate them.
 
 ### 1. ~~Movie playback in Immich~~ (fixed)
 
-Videos are now transcoded to H.264+AAC in MP4 before being copied to the reference directory, unless the video codec is
-already H.264 or HEVC.
+Videos are now transcoded to H.264+AAC in MP4 (capped at 1080p, CRF 28, preset faster) before being copied to the
+reference directory, unless the video codec is already H.264 or HEVC. The original full-quality file is preserved in the
+movies directory.
 
 ### 2. Some photos are not extracted from a video
 
