@@ -86,7 +86,7 @@ done
 
 # Read input_file from stdin if piped and not provided as argument
 if [[ -z "$VIDEO" ]] && ! [ -t 0 ]; then
-  read -r -t 1 VIDEO || true
+  read -r VIDEO || true
   # Reattach stdin to /dev/null so later ssh -tt doesn't get a dead pipe
   exec </dev/null
 fi
