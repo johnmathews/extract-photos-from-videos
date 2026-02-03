@@ -42,19 +42,26 @@ output=$("$EPM" output_dir=/bar 2>&1)
 echo "$output" | grep -q "required"
 check "output_dir only mentions required" $?
 
-# 5. Unknown positional argument -- exits 1, stderr contains "unknown argument"
-output=$("$EPM" bogus 2>&1)
-[[ $? -ne 0 ]]; check "unknown arg 'bogus' exits non-zero" $?
-echo "$output" | grep -q "unknown argument"
-check "unknown arg 'bogus' says unknown" $?
+# 5. Bare positional arg treated as input_file -- parsing succeeds, SSH fails
+output=$("$EPM" /foo 2>&1)
+rc=$?
+[[ $rc -ne 0 ]]; check "positional input_file exits non-zero (ssh unreachable)" $?
+echo "$output" | grep -q "unknown argument" && failed=1 || failed=0
+check "positional input_file no 'unknown argument'" $failed
 
-# 6. Unknown --flag argument -- exits 1, stderr contains "unknown argument"
+# 6. Two bare positional args -- second is unknown
+output=$("$EPM" /foo /bar 2>&1)
+[[ $? -ne 0 ]]; check "two positional args exits non-zero" $?
+echo "$output" | grep -q "unknown argument"
+check "two positional args says unknown" $?
+
+# 7. Unknown --flag argument -- exits 1, stderr contains "unknown argument"
 output=$("$EPM" --flag 2>&1)
 [[ $? -ne 0 ]]; check "unknown arg '--flag' exits non-zero" $?
 echo "$output" | grep -q "unknown argument"
 check "unknown arg '--flag' says unknown" $?
 
-# 7. Valid required args -- parsing succeeds (no usage/parsing error), but SSH fails
+# 9. Valid named args -- parsing succeeds (no usage/parsing error), but SSH fails
 output=$("$EPM" input_file=/foo output_dir=/bar 2>&1)
 rc=$?
 [[ $rc -ne 0 ]]; check "valid args exits non-zero (ssh unreachable)" $?
@@ -63,7 +70,7 @@ check "valid args no 'unknown argument'" $failed
 echo "$output" | grep -q "input_file is required" && failed=1 || failed=0
 check "valid args no 'required'" $failed
 
-# 8. Optional args with valid required args -- parsing succeeds
+# 10. Optional args with valid required args -- parsing succeeds
 output=$("$EPM" input_file=/foo output_dir=/bar step_time=1.0 border_px=10 2>&1)
 rc=$?
 [[ $rc -ne 0 ]]; check "optional args exits non-zero (ssh unreachable)" $?
@@ -72,7 +79,14 @@ check "optional args no 'unknown argument'" $failed
 echo "$output" | grep -q "input_file is required" && failed=1 || failed=0
 check "optional args no 'required'" $failed
 
-# 9. Args in any order -- parsing succeeds
+# 11. Positional input_file with named options -- parsing succeeds
+output=$("$EPM" /foo output_dir=/bar step_time=1.0 2>&1)
+rc=$?
+[[ $rc -ne 0 ]]; check "positional + options exits non-zero (ssh unreachable)" $?
+echo "$output" | grep -q "unknown argument" && failed=1 || failed=0
+check "positional + options no 'unknown argument'" $failed
+
+# 12. Args in any order -- parsing succeeds
 output=$("$EPM" output_dir=/bar step_time=1.0 input_file=/foo 2>&1)
 rc=$?
 [[ $rc -ne 0 ]]; check "reordered args exits non-zero (ssh unreachable)" $?
@@ -81,8 +95,8 @@ check "reordered args no 'unknown argument'" $failed
 echo "$output" | grep -q "input_file is required" && failed=1 || failed=0
 check "reordered args no 'required'" $failed
 
-# 10. Default output_dir -- uses /mnt/nfs/photos/reference
-output=$("$EPM" input_file=/foo 2>&1)
+# 13. Default output_dir -- uses /mnt/nfs/photos/reference
+output=$("$EPM" /foo 2>&1)
 echo "$output" | grep -q "/mnt/nfs/photos/reference"
 check "default output_dir shown" $?
 

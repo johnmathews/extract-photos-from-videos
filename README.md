@@ -173,12 +173,14 @@ so updates to the script take effect immediately.
 ### Usage
 
 ```bash
-epm input_file=VIDEO output_dir=DIR [options]
+epm VIDEO [output_dir=DIR] [options]
+epm input_file=VIDEO [output_dir=DIR] [options]
 ```
 
 | Argument          | Description                                                   |
 | ----------------- | ------------------------------------------------------------- |
-| `input_file=PATH` | Path to a video file on the remote machine                    |
+| `VIDEO`           | Path to a video file on the remote machine (positional)       |
+| `input_file=PATH` | Same, as a named argument                                     |
 | `output_dir=PATH` | Directory on the remote machine to copy extracted photos into |
 
 | Option              | Default | Description                                              |
@@ -191,11 +193,12 @@ epm input_file=VIDEO output_dir=DIR [options]
 ### Example Commands
 
 ```bash
-epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
-epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos step_time=1.0
+epm /data/videos/sunset.mp4
+epm /data/videos/sunset.mp4 output_dir=/data/photos
+epm /data/videos/sunset.mp4 step_time=1.0
 
 # Quote arguments containing shell special characters (e.g. brackets)
-epm input_file="/data/videos/video-[abc123].mkv" output_dir=/data/photos
+epm "/data/videos/video-[abc123].mkv" output_dir=/data/photos
 ```
 
 ### Immich integration

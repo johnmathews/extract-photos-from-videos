@@ -5,14 +5,16 @@ SSH_HOST="media"
 
 usage() {
   cat <<USAGE
-Usage: epm input_file=VIDEO [output_dir=DIR] [options]
+Usage: epm VIDEO [output_dir=DIR] [options]
+       epm input_file=VIDEO [output_dir=DIR] [options]
 
 ------------------------------------------------
 Extract Photos from Movie file, on the media VM.
 ------------------------------------------------
 
 Arguments:
-  input_file=PATH    Path to the video file on the media VM
+  VIDEO              Path to the video file on the media VM (positional)
+  input_file=PATH    Same, as a named argument
   output_dir=PATH    Directory on the media VM to copy extracted photos into
                      (default: /mnt/nfs/photos/reference)
 
@@ -35,9 +37,10 @@ Prerequisites:
   The repo and dependencies are auto-installed on first run.
 
 Examples:
-  epm input_file=/data/videos/sunset.mp4
+  epm /data/videos/sunset.mp4
+  epm /data/videos/sunset.mp4 output_dir=/data/photos
+  epm /data/videos/sunset.mp4 step_time=1.0
   epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
-  epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos step_time=1.0
 USAGE
 }
 
@@ -69,16 +72,21 @@ for arg in "$@"; do
     UPDATE_IMMICH="${arg#update_immich=}"
     ;;
   *)
-    echo "Error: unknown argument '$arg'" >&2
-    usage >&2
-    exit 1
+    # Bare positional arg (no = and no leading -) treated as input_file
+    if [[ -z "$VIDEO" && "$arg" != *=* && "$arg" != -* ]]; then
+      VIDEO="$arg"
+    else
+      echo "Error: unknown argument '$arg'" >&2
+      usage >&2
+      exit 1
+    fi
     ;;
   esac
 done
 
 # Read input_file from stdin if piped and not provided as argument
 if [[ -z "$VIDEO" ]] && ! [ -t 0 ]; then
-  read -r VIDEO
+  read -r -t 1 VIDEO || true
   # Reattach stdin to /dev/null so later ssh -tt doesn't get a dead pipe
   exec </dev/null
 fi
