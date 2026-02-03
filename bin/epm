@@ -204,25 +204,9 @@ mkdir -p "$FINAL_OUTPUT"
 find "$EXTRACTED_DIR" -maxdepth 1 -type f -exec cp {} "$FINAL_OUTPUT/" \;
 echo "Copied $PHOTO_COUNT photo(s) to $FINAL_OUTPUT"
 
-# Copy the video alongside the photos, transcoding to H.264/MP4 if needed
+# Copy or transcode the video alongside the photos (with progress bar)
 REAL_VIDEO="$(realpath "$VIDEO")"
-VIDEO_BASENAME="$(basename "$VIDEO")"
-VIDEO_CODEC="$(ffprobe -v quiet -select_streams v:0 -show_entries stream=codec_name -of csv=p=0 "$REAL_VIDEO")"
-
-if echo "$VIDEO_CODEC" | grep -qiE '^(h264|hevc)$'; then
-    cp "$REAL_VIDEO" "$FINAL_OUTPUT/"
-    echo "Copied video to $FINAL_OUTPUT/$VIDEO_BASENAME"
-else
-    VIDEO_MP4="${VIDEO_BASENAME%.*}.mp4"
-    echo "Transcoding video ($VIDEO_CODEC -> H.264/MP4) for Immich compatibility..."
-    ffmpeg -i "$REAL_VIDEO" \
-        -c:v libx264 -crf 18 -preset medium \
-        -c:a aac -b:a 192k \
-        -map_metadata 0 \
-        "$FINAL_OUTPUT/$VIDEO_MP4" -y 2>&1 | tail -1
-    echo "Saved transcoded video to $FINAL_OUTPUT/$VIDEO_MP4"
-    VIDEO_BASENAME="$VIDEO_MP4"
-fi
+VIDEO_BASENAME=$(python -m extract_photos.transcode_playback "$REAL_VIDEO" "$FINAL_OUTPUT")
 
 # Immich integration: scan library, create album, add assets, share
 if [ "$OUTPUT" != "/mnt/nfs/photos/reference" ]; then

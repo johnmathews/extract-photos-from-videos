@@ -2,6 +2,8 @@
 
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -478,6 +480,92 @@ def extract_fullres_frames(
             os.unlink(tmp_frame.name)
 
     return saved_count
+
+
+def transcode_for_playback(video_file, output_dir):
+    """Transcode video to H.264/MP4 if needed for Immich playback compatibility.
+
+    Checks the video codec via ffprobe. If already H.264 or HEVC, copies the
+    file directly. Otherwise, transcodes to H.264/AAC in MP4 with a progress bar.
+
+    All progress output goes to stderr so callers can capture the return value
+    on stdout.
+
+    Returns the basename of the output file.
+    """
+    basename = os.path.basename(video_file)
+
+    # Get codec name via ffprobe
+    codec_cmd = [
+        "ffprobe", "-v", "quiet", "-select_streams", "v:0",
+        "-show_entries", "stream=codec_name", "-of", "csv=p=0", video_file,
+    ]
+    try:
+        codec_result = subprocess.run(codec_cmd, capture_output=True, check=True, text=True)
+    except FileNotFoundError:
+        raise RuntimeError("ffprobe not found. Install ffmpeg to use this tool.")
+    codec = codec_result.stdout.strip()
+
+    if re.match(r"^(h264|hevc)$", codec, re.IGNORECASE):
+        dest = os.path.join(output_dir, basename)
+        shutil.copy2(video_file, dest)
+        print(f"Copied video to {dest}", file=sys.stderr, flush=True)
+        return basename
+
+    # Need to transcode — get duration for progress tracking
+    dur_cmd = [
+        "ffprobe", "-v", "quiet", "-show_entries", "format=duration", "-of", "csv=p=0", video_file,
+    ]
+    dur_result = subprocess.run(dur_cmd, capture_output=True, check=True, text=True)
+    duration_sec = float(dur_result.stdout.strip())
+    duration_us = duration_sec * 1_000_000
+
+    out_name = os.path.splitext(basename)[0] + ".mp4"
+    out_path = os.path.join(output_dir, out_name)
+
+    print(f"Transcoding video ({codec} -> H.264/MP4) for Immich compatibility...", file=sys.stderr, flush=True)
+
+    cmd = [
+        "ffmpeg", "-i", video_file,
+        "-c:v", "libx264", "-crf", "18", "-preset", "medium",
+        "-c:a", "aac", "-b:a", "192k",
+        "-map_metadata", "0",
+        "-progress", "pipe:1", "-nostats",
+        out_path, "-y",
+    ]
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    progress = [0.0]
+    t = Thread(target=_read_ffmpeg_progress, args=(proc, duration_us, progress, 0))
+    t.start()
+
+    wall_start = time.monotonic()
+    while t.is_alive():
+        pct = progress[0]
+        wall_elapsed = time.monotonic() - wall_start
+        if pct > 2.0:
+            eta_sec = wall_elapsed / (pct / 100) - wall_elapsed
+            eta_str = f"ETA {format_time(eta_sec)}"
+        else:
+            eta_str = "ETA --:--"
+        bar = build_progress_bar(pct)
+        sys.stderr.write(f"\r {bar}  {pct:5.1f}%   {eta_str}\033[K")
+        sys.stderr.flush()
+        time.sleep(1)
+
+    t.join()
+    proc.wait()
+
+    elapsed = format_time(time.monotonic() - wall_start)
+    sys.stderr.write(f"\r {build_progress_bar(100)}  100.0%   took {elapsed}\033[K\n")
+    sys.stderr.flush()
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg transcode failed (exit code: {proc.returncode})")
+
+    print(f"Saved transcoded video to {out_path}", file=sys.stderr, flush=True)
+    return out_name
 
 
 def extract_photos_from_video(
