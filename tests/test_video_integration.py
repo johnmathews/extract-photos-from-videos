@@ -85,7 +85,7 @@ class TestVideoIntegration:
         fps, duration, _w, _h = video_metadata
         lowres_path = transcode_lowres(TEST_VIDEO, duration)
         try:
-            timestamps = scan_for_photos(lowres_path, fps, 0.4, "test.mp4", duration)
+            timestamps = scan_for_photos(lowres_path, 0.4, "test.mp4", duration)
         finally:
             os.unlink(lowres_path)
         return timestamps

@@ -16,10 +16,6 @@ venvPath = "."
 venv = ".venv"
 typeCheckingMode = "standard"
 exclude = ["tests"]
-# numpy stubs have overload-resolution issues with opencv array types;
-# downgrade so pyright still exits cleanly.
-reportCallIssue = "warning"
-reportArgumentType = "warning"
 
 [tool.flake8]
 max-line-length = 120

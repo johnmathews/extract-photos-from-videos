@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 from extract_photos.borders import trim_and_add_border
 from extract_photos.display_progress import build_progress_bar, format_time, print_scan_progress
-from extract_photos.utils import is_valid_photo, make_safe_folder_name, setup_logger
+from extract_photos.utils import make_safe_folder_name, setup_logger
 
 HASH_SIZE = 8
 HASH_DIFF_THRESHOLD = 10  # hamming distance out of 64 bits — for first-detection
@@ -64,10 +64,10 @@ def detect_almost_uniform_borders(frame: np.ndarray, border_width: int = 5, thre
     bottom_border = gray_frame[-border_width:, :]
 
     # Calculate the standard deviation for each border
-    left_std = np.std(left_border)
-    right_std = np.std(right_border)
-    top_std = np.std(top_border)
-    bottom_std = np.std(bottom_border)
+    left_std = np.std(left_border)  # type: ignore[reportArgumentType]
+    right_std = np.std(right_border)  # type: ignore[reportArgumentType]
+    top_std = np.std(top_border)  # type: ignore[reportArgumentType]
+    bottom_std = np.std(bottom_border)  # type: ignore[reportArgumentType]
 
     # Check if the standard deviation for all borders is below the threshold
     is_left_uniform = left_std <= threshold
@@ -87,7 +87,7 @@ def _is_near_uniform(image: np.ndarray, std_threshold: float = 5.0) -> str | Non
     while even the darkest real photo has std > 15.
     """
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-    if np.std(gray) < std_threshold:
+    if np.std(gray) < std_threshold:  # type: ignore[reportArgumentType]
         return "near-uniform frame"
     return None
 
@@ -251,7 +251,7 @@ def transcode_lowres(video_file: str, video_duration_sec: float) -> str:
     return concat_out.name
 
 
-def scan_for_photos(lowres_path: str, fps: int, step_time: float, filename: str, video_duration_sec: float) -> list[tuple[float, str]]:
+def scan_for_photos(lowres_path: str, step_time: float, filename: str, video_duration_sec: float) -> list[tuple[float, str]]:
     """Scan the low-res video for frames containing photos.
 
     Steps through frames at step_time intervals, detects uniform borders,
@@ -636,7 +636,7 @@ def extract_photos_from_video(
         # Phase 2: Scan low-res for photo timestamps
         print(f"{_ts()} [2/3] Scanning for photos...", flush=True)
         photo_timestamps = scan_for_photos(
-            lowres_path, fps, step_time, filename, video_duration_sec
+            lowres_path, step_time, filename, video_duration_sec
         )
         logger.info(f"Scan complete: found {len(photo_timestamps)} candidate photos")
 

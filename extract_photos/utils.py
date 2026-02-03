@@ -69,7 +69,7 @@ def is_valid_photo(image: np.ndarray, std_threshold: float = 5.0) -> bool:
 
     # Check if the photo is near-uniform
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-    if np.std(gray) < std_threshold:
+    if np.std(gray) < std_threshold:  # type: ignore[reportArgumentType]
         return False
 
     return True

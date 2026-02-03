@@ -97,7 +97,7 @@ def trim_and_add_border(image: np.ndarray, border_px: int = 5, uniformity_thresh
     # Scan from top: first row with std > threshold
     top = 0
     for i in range(h):
-        if np.std(gray[i, :]) > uniformity_threshold:
+        if np.std(gray[i, :]) > uniformity_threshold:  # type: ignore[reportArgumentType]
             top = i
             break
     else:
@@ -107,21 +107,21 @@ def trim_and_add_border(image: np.ndarray, border_px: int = 5, uniformity_thresh
     # Scan from bottom: last row with std > threshold
     bottom = h - 1
     for i in range(h - 1, -1, -1):
-        if np.std(gray[i, :]) > uniformity_threshold:
+        if np.std(gray[i, :]) > uniformity_threshold:  # type: ignore[reportArgumentType]
             bottom = i
             break
 
     # Scan from left: first col with std > threshold
     left = 0
     for j in range(w):
-        if np.std(gray[:, j]) > uniformity_threshold:
+        if np.std(gray[:, j]) > uniformity_threshold:  # type: ignore[reportArgumentType]
             left = j
             break
 
     # Scan from right: last col with std > threshold
     right = w - 1
     for j in range(w - 1, -1, -1):
-        if np.std(gray[:, j]) > uniformity_threshold:
+        if np.std(gray[:, j]) > uniformity_threshold:  # type: ignore[reportArgumentType]
             right = j
             break
 
@@ -133,7 +133,7 @@ def trim_and_add_border(image: np.ndarray, border_px: int = 5, uniformity_thresh
 
     # Detect text/watermarks near edges and compute extra padding
     cropped_gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY) if len(cropped.shape) == 3 else cropped
-    border_gray_value = int(np.mean(cv2.cvtColor(border_sample, cv2.COLOR_BGR2GRAY) if len(border_sample.shape) == 3 else border_sample))
+    border_gray_value = int(np.mean(cv2.cvtColor(border_sample, cv2.COLOR_BGR2GRAY) if len(border_sample.shape) == 3 else border_sample))  # type: ignore[reportArgumentType]
     extra_top, extra_bottom, extra_left, extra_right = _detect_text_padding(cropped_gray, border_gray_value)
 
     pad_top = max(border_px, extra_top)
@@ -147,14 +147,14 @@ def trim_and_add_border(image: np.ndarray, border_px: int = 5, uniformity_thresh
     else:
         border_color = [int(c) for c in np.mean(border_sample, axis=(0, 1))]
 
-    result = cv2.copyMakeBorder(
+    result = cv2.copyMakeBorder(  # type: ignore[reportCallIssue]
         cropped,
         pad_top,
         pad_bottom,
         pad_left,
         pad_right,
         borderType=cv2.BORDER_CONSTANT,
-        value=border_color,
+        value=border_color,  # type: ignore[reportArgumentType]
     )
 
     return result
