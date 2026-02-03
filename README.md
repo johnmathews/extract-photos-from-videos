@@ -155,6 +155,8 @@ video fixtures and mostly validate that OpenCV and ffmpeg work, not project logi
 
 `bin/epm` is a shell script that SSHes into a remote machine and runs the extraction tool on a single video file. The
 repository and its dependencies are auto-installed on the remote on first run and auto-updated on subsequent runs.
+Ctrl-C cancels both the local and remote processes (the SSH connection uses `-tt` to allocate a remote PTY, so signals
+propagate correctly). Temporary working files are cleaned up automatically on exit.
 
 ### Prerequisites
 
