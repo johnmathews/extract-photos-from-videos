@@ -63,7 +63,8 @@ Key modules in `extract_photos/`:
 - **main.py** - Entry point. Parses args (`input_directory`, `-o`, `-s`, `-b`, `--min-photo-pct`), creates output dir,
   calls batch processor.
 - **batch_processor.py** - Scans directory for video files (.mp4/.mkv/.avi/.mov/.webm), creates per-video output
-  subdirectories, calls extractor for each.
+  subdirectories, calls extractor for each. Prompts skip-or-overwrite when a video's output directory already contains
+  extracted photos (detected by presence of both `.jpg` and video files).
 - **extract.py** - Core logic. `transcode_lowres()` creates the low-res temp file via ffmpeg. `scan_for_photos()` scans
   it single-threaded with progress display, rejecting near-uniform frames (black/white screens) before hashing.
   `extract_fullres_frames()` seeks to each timestamp in the original video. `_rejection_reason()` validates extracted
@@ -95,9 +96,10 @@ and `edge-cases.txt` (side-by-side photos and similar sequential photos). Used b
 
 **bin/epm** - Bash wrapper that SSHes into `media` VM to run the tool on a single video. Auto-installs repo/deps on first
 run and auto-updates (`git pull` + `uv sync`) on subsequent runs. Arguments with special shell characters (e.g. `[]` in
-filenames) must be quoted. Creates a temp dir with a symlink to bridge single-file input to the tool's directory-based
-interface. After extraction, calls `immich.py` to scan the library, create an album, and optionally share it (when output
-is `/mnt/nfs/photos/reference` and Immich env vars are set).
+filenames) must be quoted. Computes the sanitized output subdirectory name early (via `make_safe_folder_name`) and prompts
+skip-or-overwrite if it already contains extracted photos. Creates a temp dir with a symlink to bridge single-file input
+to the tool's directory-based interface. After extraction, calls `immich.py` to scan the library, create an album, and
+optionally share it (when output is `/mnt/nfs/photos/reference` and Immich env vars are set).
 
 ## Output structure
 

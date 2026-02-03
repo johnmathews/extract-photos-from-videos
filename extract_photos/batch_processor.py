@@ -4,6 +4,25 @@ from datetime import datetime
 from extract_photos.extract import extract_photos_from_video
 from extract_photos.utils import make_safe_folder_name
 
+VIDEO_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm")
+
+
+def _has_existing_output(directory: str) -> bool:
+    """Check if directory contains at least one .jpg file and at least one video file."""
+    if not os.path.isdir(directory):
+        return False
+    has_jpg = False
+    has_video = False
+    for entry in os.listdir(directory):
+        lower = entry.lower()
+        if lower.endswith(".jpg"):
+            has_jpg = True
+        if lower.endswith(VIDEO_EXTENSIONS):
+            has_video = True
+        if has_jpg and has_video:
+            return True
+    return False
+
 
 def process_videos_in_directory(
     input_directory: str,
@@ -25,11 +44,10 @@ def process_videos_in_directory(
 
     video_files = []
 
-    video_file_extensions = (".mp4", ".mkv", ".avi", ".mov", ".webm")
     # Iterate over all files in the input directory
     for filename in os.listdir(input_directory):
         # Skip if it's not a file or doesn't have a video file extension
-        if filename.lower().endswith(video_file_extensions):
+        if filename.lower().endswith(VIDEO_EXTENSIONS):
             video_files.append(filename)
 
     if not video_files:
@@ -46,6 +64,14 @@ def process_videos_in_directory(
         video_name = os.path.splitext(filename)[0]
         subfolder = make_safe_folder_name(video_name)
         video_output_directory = os.path.join(output_directory, subfolder)
+
+        if _has_existing_output(video_output_directory):
+            print(f"\n\033[93mOutput already exists: \033[94m{video_output_directory}\033[0m")
+            choice = input("(s)kip or (o)verwrite? [s/o]: ").strip().lower()
+            if choice != "o":
+                print(f"Skipping {filename}")
+                continue
+
         os.makedirs(video_output_directory, exist_ok=True)
 
         input_path = os.path.join(input_directory, filename)

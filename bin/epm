@@ -169,6 +169,39 @@ if [ ! -f "$VIDEO" ]; then
     exit 1
 fi
 
+# Compute the sanitized output subdirectory name early so we can check for existing output
+cd "$REPO_DIR"
+source .venv/bin/activate
+VIDEO_SUBDIR=$(python -c "
+from extract_photos.utils import make_safe_folder_name
+import os, sys
+name = os.path.splitext(os.path.basename(sys.argv[1]))[0]
+print(make_safe_folder_name(name))
+" "$VIDEO")
+FINAL_OUTPUT="$OUTPUT/$VIDEO_SUBDIR"
+
+# Check for existing output (has both .jpg and video files)
+HAS_JPG=false
+HAS_VID=false
+if [ -d "$FINAL_OUTPUT" ]; then
+    for f in "$FINAL_OUTPUT"/*; do
+        case "${f,,}" in
+            *.jpg) HAS_JPG=true ;;
+            *.mp4|*.mkv|*.avi|*.mov|*.webm) HAS_VID=true ;;
+        esac
+        $HAS_JPG && $HAS_VID && break
+    done
+fi
+
+if $HAS_JPG && $HAS_VID; then
+    echo "Output already exists: $FINAL_OUTPUT"
+    read -p "(s)kip or (o)verwrite? [s/o]: " CHOICE
+    case "$CHOICE" in
+        o|O) ;;
+        *) echo "Skipping."; exit 0 ;;
+    esac
+fi
+
 # Create temp directory with cleanup trap
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
@@ -176,9 +209,7 @@ trap 'rm -rf "$TMPDIR"' EXIT
 # Symlink the video into the temp directory
 ln -s "$(realpath "$VIDEO")" "$TMPDIR/"
 
-# Run the extraction tool
-cd "$REPO_DIR"
-source .venv/bin/activate
+# Run the extraction tool (venv already activated above)
 PYTHONUNBUFFERED=1 python -m extract_photos.main "$TMPDIR" "${EXTRA[@]+"${EXTRA[@]}"}"
 
 # Find the video-specific output subdirectory (name is lowercased/sanitised by the tool)
@@ -196,10 +227,8 @@ if [ "$PHOTO_COUNT" -eq 0 ]; then
     exit 0
 fi
 
-# Copy extracted photos (files only, skip logs/ subdirectory) to a
-# subdirectory of OUTPUT named after the video.
-VIDEO_SUBDIR="$(basename "$EXTRACTED_DIR")"
-FINAL_OUTPUT="$OUTPUT/$VIDEO_SUBDIR"
+# Copy extracted photos (files only, skip logs/ subdirectory) to
+# FINAL_OUTPUT (computed earlier for the existing-output check).
 mkdir -p "$FINAL_OUTPUT"
 find "$EXTRACTED_DIR" -maxdepth 1 -type f -exec cp {} "$FINAL_OUTPUT/" \;
 echo "Copied $PHOTO_COUNT photo(s) to $FINAL_OUTPUT"
