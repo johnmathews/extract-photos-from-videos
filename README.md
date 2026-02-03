@@ -14,9 +14,14 @@ Videos are now transcoded to H.264+AAC in MP4 (capped at 1080p, CRF 28, preset f
 reference directory, unless the video codec is already H.264 or HEVC. The original full-quality file is preserved in the
 movies directory.
 
-### 2. Some photos are not extracted from a video
+### 2. ~~Some photos are not extracted from a video~~ (fixed)
 
-Most are, but some are not. I dont know why. need to investigate.
+Photos were being missed for two reasons: the minimum size filter required both dimensions >= 1000px (rejecting
+landscape photos from 1080p video after border trimming), and the perceptual hash deduplication only compared against
+the last *recorded* photo (missing back-to-back photo transitions in continuous sequences). Fixed by switching to a
+proportional area threshold (default 25% of video frame area, tunable via `--min-photo-pct`) and adding step-to-step
+hash comparison that detects when consecutive frames change, even within a continuous photo sequence. Edge cases like
+side-by-side photos and visually similar sequential photos are covered by integration tests.
 
 ### 3. ~~Screenshots are not photos~~ (fixed)
 
@@ -43,7 +48,7 @@ real photo has std > 15. Checked during both scanning (Phase 2) and full-res ext
    - It has uniform-color borders on all four sides.
    - It is not near-uniform (solid black/white or near-solid with codec noise).
    - It is sufficiently different from the previous extracted photo (perceptual hash deduplication).
-   - The bordered content is at least 1000x1000 pixels.
+   - The bordered content covers at least 25% of the video frame area (tunable via `--min-photo-pct`).
    - It is not a screenshot (has enough color diversity to be a real photo).
 4. Borders are trimmed and replaced with a clean border matching the original color.
 5. Output is organized into per-video subdirectories.
@@ -82,6 +87,7 @@ uv run python -m extract_photos.main INPUT_DIR [options]
 | `-o, --output_subdirectory` | `extracted_photos` | Name of the output subdirectory within `INPUT_DIR`   |
 | `-s, --step_time`           | `0.5`              | Seconds between sampled frames                       |
 | `-b, --border_px`           | `5`                | Border size in pixels to add around extracted photos |
+| `--min-photo-pct`           | `25`               | Minimum photo area as % of video frame area          |
 
 ### Examples
 
