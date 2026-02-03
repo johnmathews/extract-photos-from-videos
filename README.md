@@ -8,12 +8,10 @@ annotate them.
 
 ## Known issues
 
-### 1. Movie playback in Immich
+### 1. ~~Movie playback in Immich~~ (fixed)
 
-Immich supports MKV containers, but the codec matters for playback. yt-dlp typically downloads AV1+Opus in MKV — AV1
-decoding needs server-side transcoding in Immich which may not be configured. The safest target is H.264+AAC in MP4 and
-ensuring that the movie file copied into the photos/reference/ subdirectory conforms to this requirement still needs to
-be implemented.
+Videos are now transcoded to H.264+AAC in MP4 before being copied to the reference directory, unless the video codec is
+already H.264 or HEVC.
 
 ### 2. Some photos are not extracted from a video
 
