@@ -214,9 +214,7 @@ def parse_video_timestamp(filename: str) -> float | None:
     return minutes * 60 + seconds
 
 
-def update_asset_date(
-    api_url: str, api_key: str, asset_id: str, date_str: str
-) -> None:
+def update_asset_date(api_url: str, api_key: str, asset_id: str, date_str: str) -> None:
     """Set dateTimeOriginal on an Immich asset via PUT /api/assets/{id}."""
     url = f"{api_url}/api/assets/{asset_id}"
     immich_request(url, api_key, method="PUT", data={"dateTimeOriginal": date_str})
@@ -286,7 +284,7 @@ def main() -> None:
     # 2. Poll for new assets
     asset_search_path = args.asset_path.rstrip("/") + "/"
     expected = (args.photo_count + 1) if args.photo_count else 1
-    print(f"  Waiting for assets...     ", end="", flush=True)
+    print("  Waiting for assets...     ", end="", flush=True)
     assets = poll_for_assets(
         api_url, args.api_key, asset_search_path, expected_count=expected
     )
@@ -357,8 +355,7 @@ def main() -> None:
         added = sum(1 for r in results if r.get("success"))
         dupes = sum(1 for r in results if r.get("error") == "duplicate")
         failed = [
-            r for r in results
-            if not r.get("success") and r.get("error") != "duplicate"
+            r for r in results if not r.get("success") and r.get("error") != "duplicate"
         ]
         if failed:
             print(f"{added} added, {len(failed)} failed")
@@ -372,7 +369,9 @@ def main() -> None:
             still_bad = len(failed_ids) - retry_ok
             if still_bad:
                 print(f"{retry_ok} added, {still_bad} still failed")
-                errors = {r.get("error", "unknown") for r in retry if not r.get("success")}
+                errors = {
+                    r.get("error", "unknown") for r in retry if not r.get("success")
+                }
                 print(f"  Failure reasons: {', '.join(errors)}", file=sys.stderr)
             else:
                 print(f"all {retry_ok} added")
