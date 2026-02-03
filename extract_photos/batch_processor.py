@@ -11,7 +11,6 @@ def process_videos_in_directory(
     step_time: float,
     border_px: int = 5,
     min_photo_pct: int = 25,
-    **kwargs: object,
 ) -> None:
     """
     Processes all videos in the specified directory. For each video, it creates a subdirectory
@@ -20,7 +19,6 @@ def process_videos_in_directory(
     Parameters:
     - input_directory: Path to the directory containing videos.
     - output_directory: Path to the directory where extracted photos will be stored.
-    - kwargs: Additional arguments for `extract_photos_from_video`.
     """
     # Ensure the output directory exists
     os.makedirs(output_directory, exist_ok=True)

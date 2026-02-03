@@ -29,7 +29,7 @@ class TestComputeFrameHash:
         black = np.zeros((100, 100, 3), dtype=np.uint8)
         white = np.full((100, 100, 3), 255, dtype=np.uint8)
         h_black = compute_frame_hash(black)
-        h_white = compute_frame_hash(white)
+        _h_white = compute_frame_hash(white)
         # Solid frames produce uniform hashes, but they should differ
         # (black: all False since all pixels equal mean; white: same)
         # Actually both solid frames produce all-False hashes (no pixel > mean)
@@ -177,7 +177,8 @@ class TestIsScreenshot:
         img[100:200, 0:100] = [200, 200, 200]
         img[100:200, 100:200] = [30, 30, 30]
         assert _is_screenshot(img) is not None
-        assert "screenshot" in _is_screenshot(img)
+        result = _is_screenshot(img)
+        assert result is not None and "screenshot" in result
 
     def test_random_photo_accepted(self):
         """A photo-like image with diverse colors should pass."""

@@ -7,7 +7,6 @@ Usage: python -m extract_photos.transcode_playback VIDEO OUTPUT_DIR
 """
 
 import argparse
-import sys
 
 from extract_photos.extract import transcode_for_playback
 
