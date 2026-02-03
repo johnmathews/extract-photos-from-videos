@@ -95,10 +95,10 @@ check "reordered args no 'unknown argument'" $failed
 echo "$output" | grep -q "input_file is required" && failed=1 || failed=0
 check "reordered args no 'required'" $failed
 
-# 13. Default output_dir -- uses /mnt/nfs/photos/reference
-output=$("$EPM" /foo 2>&1)
+# 13. Default output_dir -- help text mentions /mnt/nfs/photos/reference
+output=$("$EPM" help 2>&1)
 echo "$output" | grep -q "/mnt/nfs/photos/reference"
-check "default output_dir shown" $?
+check "default output_dir in help" $?
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

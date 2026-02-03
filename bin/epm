@@ -5,17 +5,19 @@ SSH_HOST="media"
 
 usage() {
   cat <<USAGE
-Usage: epm VIDEO [output_dir=DIR] [options]
-       epm input_file=VIDEO [output_dir=DIR] [options]
-
-------------------------------------------------
 Extract Photos from Movie file, on the media VM.
-------------------------------------------------
+
+Examples:
+  epm "/data/videos/Photographer-Title_of_Video-[abc123].mkv"
+  epm "/data/videos/sunset.mp4" step_time=1.0 border_px=10
+  epm "/data/videos/sunset.mp4" output_dir=/data/photos update_immich=false
+
+Usage: epm "VIDEO" [output_dir=DIR] [options]
 
 Arguments:
-  VIDEO              Path to the video file on the media VM (positional)
-  input_file=PATH    Same, as a named argument
-  output_dir=PATH    Directory on the media VM to copy extracted photos into
+  VIDEO              Path to the video file on the media VM (positional).
+                     Quote paths containing special characters (e.g. brackets).
+  output_dir=DIR     Directory on the media VM to copy extracted photos into
                      (default: /mnt/nfs/photos/reference)
 
 Options:
@@ -35,12 +37,6 @@ Environment variables (set on the media VM):
 Prerequisites:
   ssh media must be configured and working.
   The repo and dependencies are auto-installed on first run.
-
-Examples:
-  epm /data/videos/sunset.mp4
-  epm /data/videos/sunset.mp4 output_dir=/data/photos
-  epm /data/videos/sunset.mp4 step_time=1.0
-  epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
 USAGE
 }
 
