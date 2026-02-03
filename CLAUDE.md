@@ -112,5 +112,5 @@ opencv-python (video/image I/O), numpy.
 ## Code style
 
 Line length: 120 (configured for black, flake8 in pyproject.toml). All functions have type annotations; pyright is
-configured in standard mode (`uv run pyright`). Numpy/opencv stub false positives are suppressed with inline
-`# type: ignore` comments.
+configured in standard mode, scoped to `extract_photos/` via `include` (`uv run pyright`). Numpy/opencv stub false
+positives are suppressed with inline `# type: ignore` comments.

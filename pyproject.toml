@@ -12,6 +12,7 @@ dependencies = [
 ]
 
 [tool.pyright]
+include = ["extract_photos"]
 venvPath = "."
 venv = ".venv"
 typeCheckingMode = "standard"
