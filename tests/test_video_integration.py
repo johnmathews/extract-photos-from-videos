@@ -22,6 +22,7 @@ from extract_photos.utils import setup_logger
 
 TEST_VIDEO_DIR = os.path.join(os.path.dirname(__file__), "..", "test-video")
 TIMESTAMPS_FILE = os.path.join(TEST_VIDEO_DIR, "photo-timestamps.txt")
+EDGE_CASES_FILE = os.path.join(TEST_VIDEO_DIR, "edge-cases.txt")
 TOLERANCE_SEC = 3.0  # match tolerance between expected and detected timestamps
 
 
@@ -46,6 +47,22 @@ def _parse_expected_timestamps(path):
                 minutes, seconds = int(m.group(1)), int(m.group(2))
                 total_sec = minutes * 60 + seconds
                 timestamps.append((line, total_sec))
+    return timestamps
+
+
+def _parse_edge_case_timestamps(path):
+    """Parse edge-cases.txt and return a list of (label, seconds) tuples.
+
+    Finds all MM:SS timestamps anywhere in the file.
+    """
+    timestamps = []
+    with open(path) as f:
+        for line in f:
+            for m in re.finditer(r"(\d+):(\d+)", line):
+                minutes, seconds = int(m.group(1)), int(m.group(2))
+                total_sec = minutes * 60 + seconds
+                label = m.group(0)
+                timestamps.append((label, total_sec))
     return timestamps
 
 
@@ -76,6 +93,12 @@ class TestVideoIntegration:
     @pytest.fixture(scope="class")
     def expected_timestamps(self):
         return _parse_expected_timestamps(TIMESTAMPS_FILE)
+
+    @pytest.fixture(scope="class")
+    def edge_case_timestamps(self):
+        if not os.path.isfile(EDGE_CASES_FILE):
+            pytest.skip("edge-cases.txt not present")
+        return _parse_edge_case_timestamps(EDGE_CASES_FILE)
 
     def test_all_expected_timestamps_found(self, scan_results, expected_timestamps):
         """Every expected photo timestamp should have a scan match within tolerance."""
@@ -114,4 +137,42 @@ class TestVideoIntegration:
 
         assert saved == len(matched_candidates), (
             f"Expected {len(matched_candidates)} photos saved, got {saved}"
+        )
+
+    def test_edge_cases_found_in_scan(self, scan_results, edge_case_timestamps):
+        """Edge-case timestamps (side-by-side, similar sequential) should be detected."""
+        detected_seconds = [ts for ts, _ in scan_results]
+
+        missing = []
+        for label, exp_sec in edge_case_timestamps:
+            matches = [d for d in detected_seconds if abs(d - exp_sec) <= TOLERANCE_SEC]
+            if not matches:
+                missing.append(label)
+
+        assert missing == [], (
+            f"Edge-case timestamps not found in scan (tolerance {TOLERANCE_SEC}s): {missing}"
+        )
+
+    def test_edge_cases_not_rejected_at_extraction(self, scan_results, edge_case_timestamps, video_metadata):
+        """Edge-case photos should pass the extraction-phase validation."""
+        _fps, _duration, frame_w, frame_h = video_metadata
+        min_photo_area = int(frame_w * frame_h * 25 / 100)
+
+        matched_candidates = []
+        for label, exp_sec in edge_case_timestamps:
+            matches = [(ts, ts_str) for ts, ts_str in scan_results if abs(ts - exp_sec) <= TOLERANCE_SEC]
+            if matches:
+                closest = min(matches, key=lambda m: abs(m[0] - exp_sec))
+                matched_candidates.append(closest)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = os.path.join(tmpdir, "test.log")
+            logger = setup_logger(log_file)
+            saved = extract_fullres_frames(
+                TEST_VIDEO, tmpdir, matched_candidates, "test.mp4", logger,
+                min_photo_area=min_photo_area,
+            )
+
+        assert saved == len(matched_candidates), (
+            f"Expected {len(matched_candidates)} edge-case photos saved, got {saved}"
         )

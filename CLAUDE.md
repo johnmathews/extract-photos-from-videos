@@ -21,7 +21,7 @@ epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
 # Run Python tests (fast unit tests only)
 uv run pytest tests/
 
-# Run slow integration test (requires test video in test-video/)
+# Run slow integration tests (requires test video in test-video/)
 uv run pytest tests/test_video_integration.py -m slow
 
 # Run shell tests for bin/epm
@@ -56,6 +56,8 @@ Key modules in `extract_photos/`:
 - **utils.py** - Photo validation, safe folder names, logging.
 - **display_progress.py** - `format_time()`, `build_progress_bar()`, and `print_scan_progress()` for 3-line in-place terminal progress.
 - **immich.py** - Standalone Immich integration script called by `bin/epm` after extraction. Triggers a library scan, polls for new assets, orders them (video first, photos sorted by timestamp), sets `dateTimeOriginal` on each asset (video gets its YouTube upload date via ffprobe or file mtime as fallback; photos get that base date plus their video offset), creates/reuses an album named after the video, adds assets in order, optionally shares the album, and optionally sends a Pushover notification. Uses stdlib (`urllib.request`, `urllib.parse`, `json`, `subprocess`, `os`, `datetime`) plus ffprobe for metadata. Can be run directly: `python extract_photos/immich.py --api-url ... --api-key ... --library-id ... --asset-path ... --video-filename ...`.
+
+**test-video/** - Contains a test video and ground-truth timestamp files: `photo-timestamps.txt` (standard single photos) and `edge-cases.txt` (side-by-side photos and similar sequential photos). Used by the slow integration tests in `tests/test_video_integration.py`.
 
 **bin/epm** - Bash wrapper that SSHes into `media` VM to run the tool on a single video. Auto-installs repo/deps on first run and auto-updates (`git pull` + `uv sync`) on subsequent runs. Arguments with special shell characters (e.g. `[]` in filenames) must be quoted. Creates a temp dir with a symlink to bridge single-file input to the tool's directory-based interface. After extraction, calls `immich.py` to scan the library, create an album, and optionally share it (when output is `/mnt/nfs/photos/reference` and Immich env vars are set).
 
