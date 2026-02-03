@@ -270,6 +270,6 @@ EXTRACTION
 
 # Execute with -tt so Ctrl-C kills the remote process. The trap cleans up
 # the temp script regardless of how the extraction exits.
-ssh -tt "$SSH_HOST" "trap 'rm -f $REMOTE_SCRIPT' EXIT; bash -l $REMOTE_SCRIPT $(printf '%q ' "$VIDEO" "$OUTPUT" "$UPDATE_IMMICH" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")"
+ssh -tt "$SSH_HOST" "trap 'rm -f $REMOTE_SCRIPT' EXIT; bash -l $REMOTE_SCRIPT $(printf '%q ' "$VIDEO" "$OUTPUT" "$UPDATE_IMMICH" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")" </dev/tty
 
 echo "Done."
