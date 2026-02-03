@@ -58,7 +58,10 @@ Requires Python >= 3.13, [uv](https://github.com/astral-sh/uv), and [ffmpeg](htt
 git clone https://github.com/johnmathews/extract-photos-from-videos.git
 cd extract-photos
 uv sync
+git config core.hooksPath .githooks
 ```
+
+The last command enables the pre-commit hook which runs tests automatically before each commit.
 
 ## Usage
 

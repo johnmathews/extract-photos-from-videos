@@ -27,6 +27,9 @@ bash tests/test_epm.sh
 # Install dependencies
 uv sync
 
+# Enable pre-commit hook (runs tests before each commit)
+git config core.hooksPath .githooks
+
 # Build standalone executable
 pyinstaller main.spec
 ```
