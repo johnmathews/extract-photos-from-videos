@@ -171,7 +171,7 @@ ln -s "$(realpath "$VIDEO")" "$TMPDIR/"
 # Run the extraction tool
 cd "$REPO_DIR"
 source .venv/bin/activate
-PYTHONUNBUFFERED=1 python extract_photos/main.py "$TMPDIR" "${EXTRA[@]+"${EXTRA[@]}"}"
+PYTHONUNBUFFERED=1 python -m extract_photos.main "$TMPDIR" "${EXTRA[@]+"${EXTRA[@]}"}"
 
 # Find the video-specific output subdirectory (name is lowercased/sanitised by the tool)
 EXTRACTED_BASE="$TMPDIR/extracted_photos"
@@ -242,7 +242,7 @@ else
             IMMICH_ARGS+=(--pushover-user-key "$PUSHOVER_USER_KEY" --pushover-app-token "$PUSHOVER_APP_TOKEN")
         IMMICH_ARGS+=(--photo-count "$PHOTO_COUNT")
 
-        python extract_photos/immich.py "${IMMICH_ARGS[@]}"
+        python -m extract_photos.immich "${IMMICH_ARGS[@]}"
     fi
 fi
 EXTRACTION

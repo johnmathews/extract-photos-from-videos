@@ -62,7 +62,7 @@ uv sync
 ## Usage
 
 ```bash
-uv run python extract_photos/main.py INPUT_DIR [options]
+uv run python -m extract_photos.main INPUT_DIR [options]
 ```
 
 ### Arguments
@@ -83,10 +83,10 @@ uv run python extract_photos/main.py INPUT_DIR [options]
 
 ```bash
 # Process all videos in a directory
-uv run python extract_photos/main.py ~/Videos
+uv run python -m extract_photos.main ~/Videos
 
 # Slower sampling, larger borders
-uv run python extract_photos/main.py ~/Videos -s 1.0 -b 10
+uv run python -m extract_photos.main ~/Videos -s 1.0 -b 10
 ```
 
 ### Shell function
@@ -95,8 +95,8 @@ To run from anywhere without activating the virtualenv, add to your `~/.zshrc` o
 
 ```bash
 extract_photos() {
-    (source /path/to/extract-photos/.venv/bin/activate && \
-     uv run python /path/to/extract-photos/extract_photos/main.py "$@")
+    (cd /path/to/extract-photos && \
+     uv run python -m extract_photos.main "$@")
 }
 ```
 

@@ -10,10 +10,10 @@ Extracts still photographs (with solid-color borders) from video files. Designed
 
 ```bash
 # Run the tool locally
-uv run python extract_photos/main.py "/path/to/video/directory"
+uv run python -m extract_photos.main "/path/to/video/directory"
 
 # Run with options
-uv run python extract_photos/main.py "/path/to/videos" -s 1.0 -b 10
+uv run python -m extract_photos.main "/path/to/videos" -s 1.0 -b 10
 
 # Run on remote media VM (single video)
 epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
