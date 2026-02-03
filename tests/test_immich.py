@@ -199,8 +199,8 @@ class TestPollForAssets:
     @patch("extract_photos.immich.time.monotonic")
     @patch("extract_photos.immich.immich_request")
     def test_returns_on_stable_count(self, mock_req, mock_mono, mock_sleep):
-        # Count stabilises at 2 across 3 polls (stable_polls reaches 2)
-        mock_mono.side_effect = [0, 5, 10]
+        # Count stabilises at 2 across 5 polls (stable_polls reaches 4)
+        mock_mono.side_effect = [0, 5, 10, 15, 20]
         mock_req.return_value = {"assets": {"items": [{"id": "a1"}, {"id": "a2"}]}}
         result = poll_for_assets("http://immich", "key", "/path/", expected_count=5)
         assert len(result) == 2

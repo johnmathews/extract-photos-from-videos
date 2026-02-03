@@ -46,7 +46,7 @@ def poll_for_assets(
     """Poll Immich until expected number of assets appear, or timeout.
 
     Keeps polling until at least expected_count assets matching asset_path
-    are found, or two consecutive polls return the same count (scan finished).
+    are found, or four consecutive polls return the same count (scan finished).
     """
     url = f"{api_url}/api/search/metadata"
     deadline = time.monotonic() + timeout
@@ -67,7 +67,7 @@ def poll_for_assets(
         # If count stabilised across two polls, the scan is done
         if assets and len(assets) == prev_count:
             stable_polls += 1
-            if stable_polls >= 2:
+            if stable_polls >= 4:
                 return assets
         else:
             stable_polls = 0
@@ -403,6 +403,12 @@ def main() -> None:
                     f"Warning: user '{args.share_user}' not found — album not shared",
                     file=sys.stderr,
                 )
+        except urllib.error.HTTPError as e:
+            if e.code == 400:
+                print("already shared")
+            else:
+                print("failed")
+                print(f"Error: failed to share album: {e}", file=sys.stderr)
         except urllib.error.URLError as e:
             print("failed")
             print(f"Error: failed to share album: {e}", file=sys.stderr)
