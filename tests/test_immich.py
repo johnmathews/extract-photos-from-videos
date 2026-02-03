@@ -31,21 +31,6 @@ def _mock_response(data=None, status=200):
     return resp
 
 
-# -- Shared mock context for TestMain tests ----------------------------------
-# Every TestMain test needs these three patches so that main() doesn't call
-# ffprobe (get_video_date), make real HTTP requests (update_asset_date), or
-# crash on the PATCH album-order call (immich_request).
-
-_MAIN_EXTRA_PATCHES = {
-    "get_video_date": patch(
-        "extract_photos.immich.get_video_date",
-        return_value=datetime(2000, 1, 1, tzinfo=timezone.utc),
-    ),
-    "update_asset_date": patch("extract_photos.immich.update_asset_date"),
-    "immich_request": patch("extract_photos.immich.immich_request"),
-}
-
-
 class TestParseAlbumName:
     def test_standard_youtube_filename(self):
         result = parse_album_name("Willem_Verbeeck-Shooting_Los_Angeles_on_8x10_Film-[ct4a89JIIkI].mkv")

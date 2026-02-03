@@ -11,9 +11,9 @@ from threading import Thread
 
 import cv2
 import numpy as np
-from borders import trim_and_add_border
-from display_progress import build_progress_bar, format_time, print_scan_progress
-from utils import is_valid_photo, make_safe_folder_name, setup_logger
+from extract_photos.borders import trim_and_add_border
+from extract_photos.display_progress import build_progress_bar, format_time, print_scan_progress
+from extract_photos.utils import is_valid_photo, make_safe_folder_name, setup_logger
 
 HASH_SIZE = 8
 HASH_DIFF_THRESHOLD = 10  # hamming distance out of 64 bits
@@ -481,7 +481,7 @@ def extract_fullres_frames(
 
 
 def extract_photos_from_video(
-    video_file, output_folder, step_time, ssim_threshold, filename, border_px=5
+    video_file, output_folder, step_time, filename, border_px=5
 ):
     """Extract photos from a video using a three-phase pipeline:
     1. Transcode to low-res temp file

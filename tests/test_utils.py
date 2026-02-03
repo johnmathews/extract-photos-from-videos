@@ -5,7 +5,7 @@ import tempfile
 import cv2
 import numpy as np
 
-from extract_photos.utils import calculate_ssim, is_valid_photo, make_safe_folder_name, setup_logger
+from extract_photos.utils import is_valid_photo, make_safe_folder_name, setup_logger
 
 
 class TestMakeSafeFolderName:
@@ -101,29 +101,6 @@ class TestIsValidPhoto:
         rng = np.random.RandomState(42)
         img = rng.randint(10, 80, (1200, 1200, 3), dtype=np.uint8)
         assert is_valid_photo(img) is True
-
-
-class TestCalculateSSIM:
-    def test_identical_frames(self):
-        frame = np.random.randint(0, 256, (200, 200, 3), dtype=np.uint8)
-        score = calculate_ssim(frame, frame.copy())
-        assert score > 0.99
-
-    def test_different_frames(self):
-        frame1 = np.zeros((200, 200, 3), dtype=np.uint8)
-        frame2 = np.full((200, 200, 3), 255, dtype=np.uint8)
-        score = calculate_ssim(frame1, frame2)
-        assert score < 0.1
-
-    def test_similar_frames(self):
-        rng = np.random.RandomState(42)
-        frame1 = rng.randint(0, 256, (200, 200, 3), dtype=np.uint8)
-        frame2 = frame1.copy()
-        # Add small noise
-        noise = rng.randint(-5, 6, frame2.shape, dtype=np.int16)
-        frame2 = np.clip(frame2.astype(np.int16) + noise, 0, 255).astype(np.uint8)
-        score = calculate_ssim(frame1, frame2)
-        assert 0.3 < score < 1.0
 
 
 class TestSetupLogger:

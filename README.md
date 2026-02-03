@@ -73,12 +73,11 @@ uv run python extract_photos/main.py INPUT_DIR [options]
 
 ### Options
 
-| Option                      | Default            | Description                                               |
-| --------------------------- | ------------------ | --------------------------------------------------------- |
-| `-o, --output_subdirectory` | `extracted_photos` | Name of the output subdirectory within `INPUT_DIR`        |
-| `-s, --step_time`           | `0.5`              | Seconds between sampled frames                            |
-| `-t, --ssim_threshold`      | `0.90`             | SSIM threshold for deduplication (0-1, higher = stricter) |
-| `-b, --border_px`           | `5`                | Border size in pixels to add around extracted photos      |
+| Option                      | Default            | Description                                          |
+| --------------------------- | ------------------ | ---------------------------------------------------- |
+| `-o, --output_subdirectory` | `extracted_photos` | Name of the output subdirectory within `INPUT_DIR`   |
+| `-s, --step_time`           | `0.5`              | Seconds between sampled frames                       |
+| `-b, --border_px`           | `5`                | Border size in pixels to add around extracted photos |
 
 ### Examples
 
@@ -86,8 +85,8 @@ uv run python extract_photos/main.py INPUT_DIR [options]
 # Process all videos in a directory
 uv run python extract_photos/main.py ~/Videos
 
-# Slower sampling, stricter deduplication
-uv run python extract_photos/main.py ~/Videos -s 1.0 -t 0.95
+# Slower sampling, larger borders
+uv run python extract_photos/main.py ~/Videos -s 1.0 -b 10
 ```
 
 ### Shell function
@@ -123,23 +122,33 @@ second. A single log file per video records detailed extraction decisions.
 ## Testing
 
 ```bash
-# Python unit tests (utils, borders, border detection, Immich integration)
+# Run all Python tests
+uv run pytest tests/
+
+# Run with verbose output
 uv run pytest tests/ -v
 
 # Shell tests for bin/epm argument parsing
 bash tests/test_epm.sh
 ```
 
-The Python tests use synthetic numpy arrays for image-processing logic, and mocked HTTP responses for the Immich
-integration. The tested pure functions (`make_safe_folder_name`, `is_valid_photo`, `calculate_ssim`,
-`detect_almost_uniform_borders`, `_is_near_uniform`, `_is_screenshot`, `_rejection_reason`, `trim_and_add_border`) are
-where the core detection logic lives. The Immich module (`immich.py`) is tested at 92% coverage, covering the HTTP
-wrapper, polling, album creation, asset addition, user lookup, sharing, and the CLI orchestration.
+The Python tests use synthetic numpy arrays for image-processing logic and mocked HTTP responses for the Immich
+integration.
+
+**Test files:**
+
+| File                      | Module            | What it tests                                                      |
+| ------------------------- | ----------------- | ------------------------------------------------------------------ |
+| `test_extract.py`         | `extract.py`      | Border detection, near-uniform rejection, screenshot detection, perceptual hashing, rejection pipeline |
+| `test_utils.py`           | `utils.py`        | Folder name sanitization, photo validation, logger setup           |
+| `test_borders.py`         | `borders.py`      | Border trimming and re-addition                                    |
+| `test_display_progress.py`| `display_progress.py` | Time formatting, progress bar rendering                        |
+| `test_immich.py`          | `immich.py`       | HTTP wrapper, polling, album CRUD, asset ordering, date handling, sharing, push notifications, CLI orchestration |
+| `test_epm.sh`             | `bin/epm`         | Argument parsing, required/optional args, error messages (shell)   |
 
 The untested code (`transcode_lowres`, `scan_for_photos`, `extract_fullres_frames`, `extract_photos_from_video`,
-`batch_processor`, `main`) is orchestration -- transcoding, scanning, seeking, and file I/O. Testing that with real video
-files would be an integration test: slow, requiring test fixtures, and mostly validating that OpenCV and ffmpeg work
-rather than project logic.
+`batch_processor`, `main`) is orchestration that calls ffmpeg/ffprobe and does file I/O. Testing it would require real
+video fixtures and mostly validate that OpenCV and ffmpeg work, not project logic.
 
 ## Remote extraction (`epm`)
 
@@ -172,19 +181,18 @@ epm input_file=VIDEO output_dir=DIR [options]
 | `input_file=PATH` | Path to a video file on the remote machine                    |
 | `output_dir=PATH` | Directory on the remote machine to copy extracted photos into |
 
-| Option                 | Default | Description                                               |
-| ---------------------- | ------- | --------------------------------------------------------- |
-| `step_time=SECONDS`    | `0.5`   | Seconds between sampled frames                            |
-| `ssim_threshold=FLOAT` | `0.90`  | SSIM threshold for deduplication (0-1, higher = stricter) |
-| `border_px=INT`        | `5`     | Border size in pixels to add around extracted photos      |
-| `update_immich=BOOL`   | `true`  | Run Immich integration (rescan, album creation, sharing)  |
-| `help`                 |         | Show usage                                                |
+| Option              | Default | Description                                              |
+| ------------------- | ------- | -------------------------------------------------------- |
+| `step_time=SECONDS` | `0.5`   | Seconds between sampled frames                           |
+| `border_px=INT`     | `5`     | Border size in pixels to add around extracted photos     |
+| `update_immich=BOOL`| `true`  | Run Immich integration (rescan, album creation, sharing) |
+| `help`              |         | Show usage                                               |
 
 ### Example Commands
 
 ```bash
 epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
-epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos step_time=1.0 ssim_threshold=0.95
+epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos step_time=1.0
 
 # Quote arguments containing shell special characters (e.g. brackets)
 epm input_file="/data/videos/video-[abc123].mkv" output_dir=/data/photos

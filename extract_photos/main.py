@@ -3,7 +3,7 @@
 import argparse
 import os
 
-from batch_processor import process_videos_in_directory
+from extract_photos.batch_processor import process_videos_in_directory
 
 
 def main():
@@ -28,13 +28,6 @@ def main():
         help="Time interval (in seconds) to skip between frames.",
     )
     parser.add_argument(
-        "-t",
-        "--ssim_threshold",
-        type=float,
-        default=0.90,
-        help="Threshold for SSIM similarity.",
-    )
-    parser.add_argument(
         "-b",
         "--border_px",
         type=int,
@@ -55,7 +48,6 @@ def main():
     print(f"Output photos will be saved in: {output_directory}")
 
     print(f"step_time: {args.step_time}s")
-    print(f"similarity threshold: {args.ssim_threshold}")
     print(f"border_px: {args.border_px}")
 
     print()
@@ -65,7 +57,6 @@ def main():
         input_directory=input_directory,
         output_directory=output_directory,
         step_time=args.step_time,
-        ssim_threshold=args.ssim_threshold,
         border_px=args.border_px,
     )
 

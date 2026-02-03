@@ -18,7 +18,6 @@ Arguments:
 
 Options:
   step_time=SECONDS        Time between sampled frames (default: 0.5)
-  ssim_threshold=FLOAT     SSIM similarity threshold (default: 0.90)
   border_px=INT            Border size in pixels around extracted photos (default: 5)
   update_immich=BOOL       Run Immich integration after extraction (default: true)
   help                     Show this help message
@@ -38,7 +37,7 @@ Prerequisites:
 Examples:
   epm input_file=/data/videos/sunset.mp4
   epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
-  epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos step_time=1.0 ssim_threshold=0.95
+  epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos step_time=1.0
 USAGE
 }
 
@@ -62,9 +61,6 @@ for arg in "$@"; do
     ;;
   step_time=*)
     EXTRA_ARGS+=("-s" "${arg#step_time=}")
-    ;;
-  ssim_threshold=*)
-    EXTRA_ARGS+=("-t" "${arg#ssim_threshold=}")
     ;;
   border_px=*)
     EXTRA_ARGS+=("-b" "${arg#border_px=}")

@@ -64,7 +64,7 @@ echo "$output" | grep -q "input_file is required" && failed=1 || failed=0
 check "valid args no 'required'" $failed
 
 # 8. Optional args with valid required args -- parsing succeeds
-output=$("$EPM" input_file=/foo output_dir=/bar step_time=1.0 ssim_threshold=0.95 2>&1)
+output=$("$EPM" input_file=/foo output_dir=/bar step_time=1.0 border_px=10 2>&1)
 rc=$?
 [[ $rc -ne 0 ]]; check "optional args exits non-zero (ssh unreachable)" $?
 echo "$output" | grep -q "unknown argument" && failed=1 || failed=0

@@ -5,7 +5,6 @@ import logging
 
 import cv2
 import numpy as np
-from skimage.metrics import structural_similarity as ssim
 
 
 def make_safe_folder_name(title: str) -> str:
@@ -47,16 +46,6 @@ def setup_logger(log_file):
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     return logger
-
-
-def calculate_ssim(frame1, frame2):
-    """
-    Compute the Structural Similarity Index (SSIM) between two frames.
-    """
-    gray1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-    gray2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
-    score, _ = ssim(gray1, gray2, full=True)
-    return score
 
 
 def is_valid_photo(image, std_threshold=5.0):
