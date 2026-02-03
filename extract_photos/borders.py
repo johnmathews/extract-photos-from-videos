@@ -4,6 +4,75 @@ import cv2
 import numpy as np
 
 
+def _find_text_gap_from_edge(density, content_fraction=0.3, min_gap_px=10):
+    """
+    Given a 1D density profile (from one edge inward), detect a text-gap-photo pattern.
+
+    Looks for: sparse content (text) -> gap (zero density) -> dense content (photo).
+    Returns the gap width if found, otherwise 0.
+    """
+    n = len(density)
+    if n == 0:
+        return 0
+
+    # Find where dense content (photo) starts
+    dense_start = None
+    for i in range(n):
+        if density[i] >= content_fraction:
+            dense_start = i
+            break
+
+    if dense_start is None or dense_start < min_gap_px:
+        return 0
+
+    # Walk backward from dense_start to find the gap (zero-density region)
+    gap_end = dense_start
+    gap_start = None
+    for i in range(dense_start - 1, -1, -1):
+        if density[i] > 0:
+            gap_start = i + 1
+            break
+    else:
+        # All zero from edge to dense_start — no text before the gap
+        return 0
+
+    if gap_start is None:
+        return 0
+
+    gap_width = gap_end - gap_start
+    if gap_width < min_gap_px:
+        return 0
+
+    # Verify there's sparse content (text) before the gap
+    has_text = any(0 < density[i] < content_fraction for i in range(gap_start))
+    if not has_text:
+        return 0
+
+    return gap_width
+
+
+def _detect_text_padding(cropped_gray, border_gray_value, border_diff_threshold=30, content_fraction=0.3, min_gap_px=10):
+    """
+    Detect text/watermark near edges and return extra padding needed per side.
+
+    Computes a binary content mask (pixels differing from border color), then
+    checks column/row density profiles from each edge for a text-gap-photo pattern.
+
+    Returns (extra_top, extra_bottom, extra_left, extra_right) padding values.
+    """
+    mask = (np.abs(cropped_gray.astype(np.int16) - int(border_gray_value)) > border_diff_threshold).astype(np.float32)
+
+    col_density = np.mean(mask, axis=0)  # density per column (left-to-right)
+    row_density = np.mean(mask, axis=1)  # density per row (top-to-bottom)
+
+    extra_left = _find_text_gap_from_edge(col_density, content_fraction, min_gap_px)
+    extra_right = _find_text_gap_from_edge(col_density[::-1], content_fraction, min_gap_px)
+    extra_top = _find_text_gap_from_edge(row_density, content_fraction, min_gap_px)
+    extra_bottom = _find_text_gap_from_edge(row_density[::-1], content_fraction, min_gap_px)
+
+    return extra_top, extra_bottom, extra_left, extra_right
+
+
 def trim_and_add_border(image, border_px=5, uniformity_threshold=10):
     """
     Trims uniform borders from an image using edge-scanning, then adds a
@@ -62,28 +131,30 @@ def trim_and_add_border(image, border_px=5, uniformity_threshold=10):
     # Crop to content
     cropped = image[top : bottom + 1, left : right + 1]
 
+    # Detect text/watermarks near edges and compute extra padding
+    cropped_gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY) if len(cropped.shape) == 3 else cropped
+    border_gray_value = int(np.mean(cv2.cvtColor(border_sample, cv2.COLOR_BGR2GRAY) if len(border_sample.shape) == 3 else border_sample))
+    extra_top, extra_bottom, extra_left, extra_right = _detect_text_padding(cropped_gray, border_gray_value)
+
+    pad_top = max(border_px, extra_top)
+    pad_bottom = max(border_px, extra_bottom)
+    pad_left = max(border_px, extra_left)
+    pad_right = max(border_px, extra_right)
+
     # Add new border
     if len(image.shape) == 2:
         border_color = int(np.mean(border_sample))
-        result = cv2.copyMakeBorder(
-            cropped,
-            border_px,
-            border_px,
-            border_px,
-            border_px,
-            borderType=cv2.BORDER_CONSTANT,
-            value=border_color,
-        )
     else:
         border_color = [int(c) for c in np.mean(border_sample, axis=(0, 1))]
-        result = cv2.copyMakeBorder(
-            cropped,
-            border_px,
-            border_px,
-            border_px,
-            border_px,
-            borderType=cv2.BORDER_CONSTANT,
-            value=border_color,
-        )
+
+    result = cv2.copyMakeBorder(
+        cropped,
+        pad_top,
+        pad_bottom,
+        pad_left,
+        pad_right,
+        borderType=cv2.BORDER_CONSTANT,
+        value=border_color,
+    )
 
     return result
