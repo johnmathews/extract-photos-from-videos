@@ -84,6 +84,24 @@ class TestIsValidPhoto:
         img = np.tile((np.arange(1200) % 256).astype(np.uint8), (1200, 1))
         assert is_valid_photo(img) is True
 
+    def test_near_black_rejected(self):
+        """Near-black image with slight noise (std < 5) should be rejected."""
+        rng = np.random.RandomState(42)
+        img = rng.randint(0, 4, (1200, 1200, 3), dtype=np.uint8)
+        assert is_valid_photo(img) is False
+
+    def test_near_white_rejected(self):
+        """Near-white image with slight noise (std < 5) should be rejected."""
+        rng = np.random.RandomState(42)
+        img = 252 + rng.randint(0, 4, (1200, 1200, 3), dtype=np.uint8)
+        assert is_valid_photo(img) is False
+
+    def test_dark_but_textured_accepted(self):
+        """A dark image with real texture (std > 5) should be accepted."""
+        rng = np.random.RandomState(42)
+        img = rng.randint(10, 80, (1200, 1200, 3), dtype=np.uint8)
+        assert is_valid_photo(img) is True
+
 
 class TestCalculateSSIM:
     def test_identical_frames(self):

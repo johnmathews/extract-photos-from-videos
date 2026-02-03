@@ -1,8 +1,8 @@
 import os
 from datetime import datetime
 
-from extract import extract_photos_from_video
-from utils import make_safe_folder_name
+from extract_photos.extract import extract_photos_from_video
+from extract_photos.utils import make_safe_folder_name
 
 
 def process_videos_in_directory(

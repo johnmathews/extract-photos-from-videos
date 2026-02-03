@@ -75,6 +75,42 @@ def detect_almost_uniform_borders(frame, border_width=5, threshold=10):
     return is_left_uniform and is_right_uniform and is_top_uniform and is_bottom_uniform
 
 
+def _is_near_uniform(image, std_threshold=5.0):
+    """Return a rejection reason if the image is near-uniform (solid color with noise), else None.
+
+    Converts to grayscale and checks overall standard deviation.
+    Pure black/white frames have std ~0, codec noise gives std ~1-3,
+    while even the darkest real photo has std > 15.
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    if np.std(gray) < std_threshold:
+        return "near-uniform frame"
+    return None
+
+
+def _is_screenshot(image, color_count_threshold=100, sample_size=128):
+    """Return a rejection reason if the image looks like a screenshot/UI, else None.
+
+    Downscales to sample_size x sample_size, quantizes colors to 32 levels per channel,
+    and counts unique color combinations. Photos typically have 100+ unique quantized
+    colors at 128x128; screenshots with flat UI regions have 4-30 unique colors.
+    Skips grayscale images (can't reliably classify without color info).
+    """
+    if len(image.shape) < 3 or image.shape[2] < 3:
+        return None
+    small = cv2.resize(image, (sample_size, sample_size), interpolation=cv2.INTER_AREA)
+    quantized = small // 8  # 256 / 8 = 32 levels per channel
+    # Pack RGB into a single int per pixel for fast unique counting
+    r = quantized[:, :, 0].astype(np.uint32)
+    g = quantized[:, :, 1].astype(np.uint32)
+    b = quantized[:, :, 2].astype(np.uint32)
+    packed = r * 1024 + g * 32 + b
+    unique_colors = len(np.unique(packed))
+    if unique_colors < color_count_threshold:
+        return f"screenshot ({unique_colors} unique colors)"
+    return None
+
+
 def _read_ffmpeg_progress(process, duration_us, progress_list, index):
     """Read ffmpeg -progress output and update progress_list[index] with percentage."""
     for raw_line in process.stdout:
@@ -255,7 +291,7 @@ def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
         else:
             time_str = f"{minutes}m{seconds:02d}s"
 
-        if detect_almost_uniform_borders(frame):
+        if detect_almost_uniform_borders(frame) and _is_near_uniform(frame) is None:
             frame_hash = compute_frame_hash(frame)
             is_new = (
                 prev_photo_hash is None
@@ -309,16 +345,12 @@ def _rejection_reason(image):
     h, w = image.shape[:2]
     if h < 1000 or w < 1000:
         return f"too small ({w}x{h})"
-    if len(image.shape) == 2:
-        if np.all(image == image[0, 0]):
-            return "single color"
-    else:
-        if (
-            np.all(image[:, :, 0] == image[0, 0, 0])
-            and np.all(image[:, :, 1] == image[0, 0, 1])
-            and np.all(image[:, :, 2] == image[0, 0, 2])
-        ):
-            return "single color"
+    reason = _is_near_uniform(image)
+    if reason:
+        return reason
+    reason = _is_screenshot(image)
+    if reason:
+        return reason
     return None
 
 

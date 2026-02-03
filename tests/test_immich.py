@@ -1,17 +1,22 @@
 import json
 import urllib.parse
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from extract_photos.immich import (
     add_assets_to_album,
     find_or_create_album,
     find_user,
+    get_video_date,
     immich_request,
+    order_assets,
     parse_album_name,
+    parse_video_timestamp,
     poll_for_assets,
     send_pushover,
     share_album,
     trigger_scan,
+    update_asset_date,
 )
 
 
@@ -24,6 +29,21 @@ def _mock_response(data=None, status=200):
     resp.__enter__ = lambda s: s
     resp.__exit__ = MagicMock(return_value=False)
     return resp
+
+
+# -- Shared mock context for TestMain tests ----------------------------------
+# Every TestMain test needs these three patches so that main() doesn't call
+# ffprobe (get_video_date), make real HTTP requests (update_asset_date), or
+# crash on the PATCH album-order call (immich_request).
+
+_MAIN_EXTRA_PATCHES = {
+    "get_video_date": patch(
+        "extract_photos.immich.get_video_date",
+        return_value=datetime(2000, 1, 1, tzinfo=timezone.utc),
+    ),
+    "update_asset_date": patch("extract_photos.immich.update_asset_date"),
+    "immich_request": patch("extract_photos.immich.immich_request"),
+}
 
 
 class TestParseAlbumName:
@@ -177,6 +197,38 @@ class TestPollForAssets:
             "http://immich/api/search/metadata", "key", method="POST", data={"originalPath": "/photos/subdir/"}
         )
 
+    @patch("extract_photos.immich.time.sleep")
+    @patch("extract_photos.immich.time.monotonic")
+    @patch("extract_photos.immich.immich_request")
+    def test_waits_for_expected_count(self, mock_req, mock_mono, mock_sleep):
+        mock_mono.side_effect = [0, 5, 10, 15]
+        mock_req.side_effect = [
+            {"assets": {"items": [{"id": "a1"}]}},
+            {"assets": {"items": [{"id": "a1"}, {"id": "a2"}]}},
+            {"assets": {"items": [{"id": "a1"}, {"id": "a2"}, {"id": "a3"}]}},
+        ]
+        result = poll_for_assets("http://immich", "key", "/path/", expected_count=3)
+        assert len(result) == 3
+
+    @patch("extract_photos.immich.time.sleep")
+    @patch("extract_photos.immich.time.monotonic")
+    @patch("extract_photos.immich.immich_request")
+    def test_returns_on_stable_count(self, mock_req, mock_mono, mock_sleep):
+        # Count stabilises at 2 across 3 polls (stable_polls reaches 2)
+        mock_mono.side_effect = [0, 5, 10]
+        mock_req.return_value = {"assets": {"items": [{"id": "a1"}, {"id": "a2"}]}}
+        result = poll_for_assets("http://immich", "key", "/path/", expected_count=5)
+        assert len(result) == 2
+
+    @patch("extract_photos.immich.time.sleep")
+    @patch("extract_photos.immich.time.monotonic")
+    @patch("extract_photos.immich.immich_request")
+    def test_returns_partial_on_timeout(self, mock_req, mock_mono, mock_sleep):
+        mock_mono.side_effect = [0, 5, 301]
+        mock_req.return_value = {"assets": {"items": [{"id": "a1"}]}}
+        result = poll_for_assets("http://immich", "key", "/path/", expected_count=5, timeout=300)
+        assert len(result) == 1
+
 
 class TestFindOrCreateAlbum:
     @patch("extract_photos.immich.immich_request")
@@ -218,10 +270,23 @@ class TestFindOrCreateAlbum:
 class TestAddAssetsToAlbum:
     @patch("extract_photos.immich.immich_request")
     def test_sends_asset_ids(self, mock_req):
-        add_assets_to_album("http://immich", "key", "album-1", ["a1", "a2", "a3"])
+        mock_req.return_value = [
+            {"id": "a1", "success": True},
+            {"id": "a2", "success": True},
+            {"id": "a3", "success": True},
+        ]
+        result = add_assets_to_album("http://immich", "key", "album-1", ["a1", "a2", "a3"])
         mock_req.assert_called_once_with(
             "http://immich/api/albums/album-1/assets", "key", method="PUT", data={"ids": ["a1", "a2", "a3"]}
         )
+        assert len(result) == 3
+        assert all(r["success"] for r in result)
+
+    @patch("extract_photos.immich.immich_request")
+    def test_returns_empty_list_for_non_list_response(self, mock_req):
+        mock_req.return_value = None
+        result = add_assets_to_album("http://immich", "key", "album-1", ["a1"])
+        assert result == []
 
 
 class TestFindUser:
@@ -287,7 +352,146 @@ class TestSendPushover:
             pass
 
 
+class TestParseVideoTimestamp:
+    def test_whole_seconds(self):
+        assert parse_video_timestamp("video_5m04s.jpg") == 304.0
+
+    def test_sub_second(self):
+        assert parse_video_timestamp("video_1m23.5s.jpg") == 83.5
+
+    def test_zero_minutes(self):
+        assert parse_video_timestamp("video_0m30s.jpg") == 30.0
+
+    def test_large_timestamp(self):
+        assert parse_video_timestamp("video_22m01.9s.jpg") == 1321.9
+
+    def test_no_match_video_file(self):
+        assert parse_video_timestamp("video.mkv") is None
+
+    def test_no_match_non_jpg(self):
+        assert parse_video_timestamp("video_5m04s.png") is None
+
+    def test_path_with_directories(self):
+        assert parse_video_timestamp("/mnt/photos/ref/video_3m11s.jpg") == 191.0
+
+
+class TestOrderAssets:
+    def test_video_sorted_first(self):
+        assets = [
+            {"id": "p1", "originalPath": "/dir/photo_1m23s.jpg"},
+            {"id": "v1", "originalPath": "/dir/video.mkv"},
+            {"id": "p2", "originalPath": "/dir/photo_0m30s.jpg"},
+        ]
+        result = order_assets(assets)
+        assert [a["id"] for a in result] == ["v1", "p2", "p1"]
+
+    def test_photos_sorted_by_timestamp(self):
+        assets = [
+            {"id": "p3", "originalPath": "/dir/photo_5m04s.jpg"},
+            {"id": "p1", "originalPath": "/dir/photo_0m30s.jpg"},
+            {"id": "p2", "originalPath": "/dir/photo_1m23.5s.jpg"},
+        ]
+        result = order_assets(assets)
+        assert [a["id"] for a in result] == ["p1", "p2", "p3"]
+
+    def test_all_video_extensions(self):
+        for ext in (".mkv", ".mp4", ".avi", ".webm", ".mov"):
+            assets = [
+                {"id": "p1", "originalPath": "/dir/photo_1m00s.jpg"},
+                {"id": "v1", "originalPath": f"/dir/video{ext}"},
+            ]
+            result = order_assets(assets)
+            assert result[0]["id"] == "v1", f"Failed for {ext}"
+
+    def test_empty_list(self):
+        assert order_assets([]) == []
+
+    def test_assets_without_original_path(self):
+        assets = [{"id": "a1"}, {"id": "a2"}]
+        result = order_assets(assets)
+        assert len(result) == 2
+
+
+class TestGetVideoDate:
+    @patch("extract_photos.immich.os.path.getmtime")
+    @patch("extract_photos.immich.subprocess.run")
+    def test_uses_date_tag_from_ffprobe(self, mock_run, mock_mtime):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"format": {"tags": {"DATE": "20240315"}}}),
+        )
+        result = get_video_date("/some/video.mkv")
+        assert result == datetime(2024, 3, 15, tzinfo=timezone.utc)
+        mock_mtime.assert_not_called()
+
+    @patch("extract_photos.immich.os.path.getmtime")
+    @patch("extract_photos.immich.subprocess.run")
+    def test_lowercase_date_tag(self, mock_run, mock_mtime):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"format": {"tags": {"date": "20230101"}}}),
+        )
+        result = get_video_date("/some/video.mkv")
+        assert result == datetime(2023, 1, 1, tzinfo=timezone.utc)
+
+    @patch("extract_photos.immich.os.path.getmtime")
+    @patch("extract_photos.immich.subprocess.run")
+    def test_falls_back_to_mtime(self, mock_run, mock_mtime):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"format": {"tags": {}}}),
+        )
+        mock_mtime.return_value = 1710500000.0
+        result = get_video_date("/some/video.mkv")
+        assert result.year == 2024
+
+    @patch("extract_photos.immich.os.path.getmtime", side_effect=OSError)
+    @patch("extract_photos.immich.subprocess.run", side_effect=FileNotFoundError)
+    def test_falls_back_to_2000(self, mock_run, mock_mtime):
+        result = get_video_date("/some/video.mkv")
+        assert result == datetime(2000, 1, 1, tzinfo=timezone.utc)
+
+    @patch("extract_photos.immich.os.path.getmtime")
+    @patch("extract_photos.immich.subprocess.run")
+    def test_ignores_short_date_tag(self, mock_run, mock_mtime):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"format": {"tags": {"DATE": "2024"}}}),
+        )
+        mock_mtime.return_value = 1710500000.0
+        result = get_video_date("/some/video.mkv")
+        # Short tag ignored, falls back to mtime
+        assert result.year == 2024
+
+    @patch("extract_photos.immich.os.path.getmtime")
+    @patch("extract_photos.immich.subprocess.run")
+    def test_ignores_ffprobe_failure(self, mock_run, mock_mtime):
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
+        mock_mtime.return_value = 1710500000.0
+        result = get_video_date("/some/video.mkv")
+        assert result.year == 2024
+
+
+class TestUpdateAssetDate:
+    @patch("extract_photos.immich.immich_request")
+    def test_calls_put_with_date(self, mock_req):
+        update_asset_date("http://immich", "key", "asset-1", "2024-03-15T00:00:00.000Z")
+        mock_req.assert_called_once_with(
+            "http://immich/api/assets/asset-1",
+            "key",
+            method="PUT",
+            data={"dateTimeOriginal": "2024-03-15T00:00:00.000Z"},
+        )
+
+
 class TestMain:
+    """Tests for the main() CLI orchestration.
+
+    Every test mocks get_video_date, update_asset_date, and immich_request
+    via context managers so that main() doesn't call ffprobe, make real
+    HTTP requests for date updates, or crash on the PATCH album-order call.
+    """
+
     @patch("extract_photos.immich.send_pushover")
     @patch("extract_photos.immich.share_album")
     @patch("extract_photos.immich.find_user", return_value="user-42")
@@ -298,6 +502,8 @@ class TestMain:
     def test_full_flow_with_share(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push):
         from extract_photos.immich import main
 
+        mock_add.return_value = [{"id": "a1", "success": True}, {"id": "a2", "success": True}]
+
         args = [
             "--api-url", "http://immich",
             "--api-key", "key",
@@ -306,11 +512,16 @@ class TestMain:
             "--video-filename", "Author-Title-[id].mkv",
             "--share-user", "john",
         ]
-        with patch("sys.argv", ["immich.py"] + args):
+        with (
+            patch("sys.argv", ["immich.py"] + args),
+            patch("extract_photos.immich.get_video_date", return_value=datetime(2000, 1, 1, tzinfo=timezone.utc)),
+            patch("extract_photos.immich.update_asset_date"),
+            patch("extract_photos.immich.immich_request"),
+        ):
             main()
 
         mock_scan.assert_called_once_with("http://immich", "key", "lib-1")
-        mock_poll.assert_called_once_with("http://immich", "key", "/photos/subdir/")
+        mock_poll.assert_called_once_with("http://immich", "key", "/photos/subdir/", expected_count=1)
         mock_album.assert_called_once_with("http://immich", "key", "Author - Title")
         mock_add.assert_called_once_with("http://immich", "key", "album-1", ["a1", "a2"])
         mock_find.assert_called_once_with("http://immich", "key", "john")
@@ -327,6 +538,8 @@ class TestMain:
     def test_no_share_without_flag(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push, capsys):
         from extract_photos.immich import main
 
+        mock_add.return_value = [{"id": "a1", "success": True}]
+
         args = [
             "--api-url", "http://immich",
             "--api-key", "key",
@@ -334,7 +547,12 @@ class TestMain:
             "--asset-path", "/photos/subdir",
             "--video-filename", "Author-Title.mkv",
         ]
-        with patch("sys.argv", ["immich.py"] + args):
+        with (
+            patch("sys.argv", ["immich.py"] + args),
+            patch("extract_photos.immich.get_video_date", return_value=datetime(2000, 1, 1, tzinfo=timezone.utc)),
+            patch("extract_photos.immich.update_asset_date"),
+            patch("extract_photos.immich.immich_request"),
+        ):
             main()
 
         mock_find.assert_not_called()
@@ -396,6 +614,8 @@ class TestMain:
     def test_skips_share_when_user_not_found(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push):
         from extract_photos.immich import main
 
+        mock_add.return_value = [{"id": "a1", "success": True}]
+
         args = [
             "--api-url", "http://immich",
             "--api-key", "key",
@@ -404,7 +624,12 @@ class TestMain:
             "--video-filename", "Author-Title.mkv",
             "--share-user", "nobody",
         ]
-        with patch("sys.argv", ["immich.py"] + args):
+        with (
+            patch("sys.argv", ["immich.py"] + args),
+            patch("extract_photos.immich.get_video_date", return_value=datetime(2000, 1, 1, tzinfo=timezone.utc)),
+            patch("extract_photos.immich.update_asset_date"),
+            patch("extract_photos.immich.immich_request"),
+        ):
             main()
 
         mock_find.assert_called_once_with("http://immich", "key", "nobody")
@@ -417,6 +642,8 @@ class TestMain:
     def test_trailing_slash_stripped_from_api_url(self, mock_scan, mock_poll, mock_album, mock_add):
         from extract_photos.immich import main
 
+        mock_add.return_value = [{"id": "a1", "success": True}]
+
         args = [
             "--api-url", "http://immich/",
             "--api-key", "key",
@@ -424,7 +651,12 @@ class TestMain:
             "--asset-path", "/photos/subdir",
             "--video-filename", "Author-Title.mkv",
         ]
-        with patch("sys.argv", ["immich.py"] + args):
+        with (
+            patch("sys.argv", ["immich.py"] + args),
+            patch("extract_photos.immich.get_video_date", return_value=datetime(2000, 1, 1, tzinfo=timezone.utc)),
+            patch("extract_photos.immich.update_asset_date"),
+            patch("extract_photos.immich.immich_request"),
+        ):
             main()
 
         mock_scan.assert_called_once_with("http://immich", "key", "lib-1")
@@ -439,6 +671,12 @@ class TestMain:
     def test_pushover_sent_with_all_args(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push):
         from extract_photos.immich import main
 
+        mock_add.return_value = [
+            {"id": "a1", "success": True},
+            {"id": "a2", "success": True},
+            {"id": "a3", "success": True},
+        ]
+
         args = [
             "--api-url", "http://immich",
             "--api-key", "key",
@@ -450,9 +688,15 @@ class TestMain:
             "--pushover-app-token", "atoken",
             "--photo-count", "32",
         ]
-        with patch("sys.argv", ["immich.py"] + args):
+        with (
+            patch("sys.argv", ["immich.py"] + args),
+            patch("extract_photos.immich.get_video_date", return_value=datetime(2000, 1, 1, tzinfo=timezone.utc)),
+            patch("extract_photos.immich.update_asset_date"),
+            patch("extract_photos.immich.immich_request"),
+        ):
             main()
 
+        mock_poll.assert_called_once_with("http://immich", "key", "/photos/subdir/", expected_count=33)
         mock_push.assert_called_once()
         call_args = mock_push.call_args
         assert call_args[0][0] == "ukey"
@@ -461,7 +705,7 @@ class TestMain:
         message = call_args[0][3]
         assert "32 photos extracted" in message
         assert "Album: Author - Title" in message
-        assert "3 assets added" in message
+        assert "3 assets in album" in message
         assert "shared with john" in message
 
     @patch("extract_photos.immich.send_pushover")
@@ -472,6 +716,8 @@ class TestMain:
     def test_pushover_skipped_without_both_keys(self, mock_scan, mock_poll, mock_album, mock_add, mock_push, capsys):
         from extract_photos.immich import main
 
+        mock_add.return_value = [{"id": "a1", "success": True}]
+
         args = [
             "--api-url", "http://immich",
             "--api-key", "key",
@@ -480,11 +726,15 @@ class TestMain:
             "--video-filename", "Author-Title.mkv",
             "--pushover-user-key", "ukey",
         ]
-        with patch("sys.argv", ["immich.py"] + args):
+        with (
+            patch("sys.argv", ["immich.py"] + args),
+            patch("extract_photos.immich.get_video_date", return_value=datetime(2000, 1, 1, tzinfo=timezone.utc)),
+            patch("extract_photos.immich.update_asset_date"),
+            patch("extract_photos.immich.immich_request"),
+        ):
             main()
 
         mock_push.assert_not_called()
-        # Should not mention pushover at all in output
         output = capsys.readouterr().out
         assert "notification" not in output.lower()
 
@@ -496,6 +746,8 @@ class TestMain:
     def test_pushover_without_photo_count(self, mock_scan, mock_poll, mock_album, mock_add, mock_push):
         from extract_photos.immich import main
 
+        mock_add.return_value = [{"id": "a1", "success": True}]
+
         args = [
             "--api-url", "http://immich",
             "--api-key", "key",
@@ -505,7 +757,12 @@ class TestMain:
             "--pushover-user-key", "ukey",
             "--pushover-app-token", "atoken",
         ]
-        with patch("sys.argv", ["immich.py"] + args):
+        with (
+            patch("sys.argv", ["immich.py"] + args),
+            patch("extract_photos.immich.get_video_date", return_value=datetime(2000, 1, 1, tzinfo=timezone.utc)),
+            patch("extract_photos.immich.update_asset_date"),
+            patch("extract_photos.immich.immich_request"),
+        ):
             main()
 
         mock_push.assert_called_once()
@@ -514,8 +771,10 @@ class TestMain:
         assert "Album: Author - Title" in message
 
     def test_output_format(self, capsys):
-        """Verify the structured output format with emojis."""
+        """Verify the structured output format."""
         from extract_photos.immich import main
+
+        add_result = [{"id": "a1", "success": True}, {"id": "a2", "success": True}]
 
         args = [
             "--api-url", "http://immich",
@@ -530,9 +789,12 @@ class TestMain:
             patch("extract_photos.immich.trigger_scan"),
             patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}, {"id": "a2"}]),
             patch("extract_photos.immich.find_or_create_album", return_value="album-1"),
-            patch("extract_photos.immich.add_assets_to_album"),
+            patch("extract_photos.immich.add_assets_to_album", return_value=add_result),
             patch("extract_photos.immich.find_user", return_value="user-42"),
             patch("extract_photos.immich.share_album"),
+            patch("extract_photos.immich.get_video_date", return_value=datetime(2000, 1, 1, tzinfo=timezone.utc)),
+            patch("extract_photos.immich.update_asset_date"),
+            patch("extract_photos.immich.immich_request"),
         ):
             main()
 
@@ -541,6 +803,9 @@ class TestMain:
         assert "Scanning library..." in output
         assert "Waiting for assets..." in output
         assert "2 found" in output
+        assert "Ordering assets..." in output
+        assert "Video date:" in output
+        assert "Setting asset dates..." in output
         assert "Album: Author - Title" in output
         assert "Creating album..." in output
         assert "Adding 2 asset(s)..." in output

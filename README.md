@@ -17,15 +17,17 @@ already H.264 or HEVC.
 
 Most are, but some are not. I dont know why. need to investigate.
 
-### 3. Screenshots are not photos
+### 3. ~~Screenshots are not photos~~ (fixed)
 
-It is common in photography videos on youtube to have an ad segment where some screenshots and UI screens are shown.
-these typically have white borders like a photo, but should be excluded. Lets think about possible solutions to this.
+Screenshots and UI screens from ad segments are now detected by counting unique quantized colors. The image is downscaled
+to 128x128 and quantized to 32 levels per channel. Screenshots have flat UI regions with very few unique colors (4-30),
+while real photos have natural color diversity (100+). Checked during full-res extraction (Phase 3).
 
-### 4. Black screens or white screens are not photos
+### 4. ~~Black screens or white screens are not photos~~ (fixed)
 
-A screen that is entirely one color (often all black) is not a photo and should not be extracted. A similarity threshold
-might also be necessary to avoid transition screens that have a slight gradient.
+Near-uniform frames (solid color or near-solid with codec noise/slight gradients) are now rejected by checking the
+grayscale standard deviation. Pure black/white frames have std ~0, codec noise gives std ~1-3, while even the darkest
+real photo has std > 15. Checked during both scanning (Phase 2) and full-res extraction (Phase 3).
 
 ## How it works
 
@@ -38,8 +40,10 @@ might also be necessary to avoid transition screens that have a slight gradient.
      validated, and saved.
 3. A frame is extracted as a photo when:
    - It has uniform-color borders on all four sides.
+   - It is not near-uniform (solid black/white or near-solid with codec noise).
    - It is sufficiently different from the previous extracted photo (perceptual hash deduplication).
    - The bordered content is at least 1000x1000 pixels.
+   - It is not a screenshot (has enough color diversity to be a real photo).
 4. Borders are trimmed and replaced with a clean border matching the original color.
 5. Output is organized into per-video subdirectories.
 
@@ -128,9 +132,9 @@ bash tests/test_epm.sh
 
 The Python tests use synthetic numpy arrays for image-processing logic, and mocked HTTP responses for the Immich
 integration. The tested pure functions (`make_safe_folder_name`, `is_valid_photo`, `calculate_ssim`,
-`detect_almost_uniform_borders`, `trim_and_add_border`) are where the core detection logic lives. The Immich module
-(`immich.py`) is tested at 92% coverage, covering the HTTP wrapper, polling, album creation, asset addition, user lookup,
-sharing, and the CLI orchestration.
+`detect_almost_uniform_borders`, `_is_near_uniform`, `_is_screenshot`, `_rejection_reason`, `trim_and_add_border`) are
+where the core detection logic lives. The Immich module (`immich.py`) is tested at 92% coverage, covering the HTTP
+wrapper, polling, album creation, asset addition, user lookup, sharing, and the CLI orchestration.
 
 The untested code (`transcode_lowres`, `scan_for_photos`, `extract_fullres_frames`, `extract_photos_from_video`,
 `batch_processor`, `main`) is orchestration -- transcoding, scanning, seeking, and file I/O. Testing that with real video

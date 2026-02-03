@@ -59,14 +59,15 @@ def calculate_ssim(frame1, frame2):
     return score
 
 
-def is_valid_photo(image):
+def is_valid_photo(image, std_threshold=5.0):
     """
     Check if the photo is valid:
     - Minimum dimensions: 1000x1000 pixels.
-    - Not a single color.
+    - Not near-uniform (solid color or near-solid with codec noise).
 
     Parameters:
     - image: The input photo (NumPy array).
+    - std_threshold: Maximum grayscale std dev to consider near-uniform.
 
     Returns:
     - True if valid, False otherwise.
@@ -77,16 +78,9 @@ def is_valid_photo(image):
     if h < 1000 or w < 1000:
         return False
 
-    # Check if the photo is a single color
-    if len(image.shape) == 2:  # Grayscale image
-        if np.all(image == image[0, 0]):
-            return False
-    else:  # Color image
-        if (
-            np.all(image[:, :, 0] == image[0, 0, 0])
-            and np.all(image[:, :, 1] == image[0, 0, 1])
-            and np.all(image[:, :, 2] == image[0, 0, 2])
-        ):
-            return False
+    # Check if the photo is near-uniform
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    if np.std(gray) < std_threshold:
+        return False
 
     return True
