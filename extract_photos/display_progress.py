@@ -1,7 +1,7 @@
 import sys
 
 
-def format_time(seconds):
+def format_time(seconds: float) -> str:
     """Format seconds as M:SS or H:MM:SS."""
     seconds = int(seconds)
     if seconds < 0:
@@ -15,7 +15,7 @@ def format_time(seconds):
         return f"{m}:{s:02d}"
 
 
-def build_progress_bar(pct, width=30):
+def build_progress_bar(pct: float, width: int = 30) -> str:
     """Build an ASCII progress bar like [===========-------------------]."""
     filled = int(pct / 100 * width)
     filled = min(filled, width)
@@ -23,8 +23,8 @@ def build_progress_bar(pct, width=30):
 
 
 def print_scan_progress(
-    filename, pct, video_pos_sec, video_duration_sec, photo_count, eta_str
-):
+    filename: str, pct: float, video_pos_sec: float, video_duration_sec: float, photo_count: int, eta_str: str
+) -> None:
     """
     Print a 3-line in-place progress display for the scanning phase.
 

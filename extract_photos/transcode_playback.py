@@ -12,7 +12,7 @@ import sys
 from extract_photos.extract import transcode_for_playback
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Transcode video to H.264/MP4 for playback compatibility")
     parser.add_argument("video_file", help="Path to the input video file")
     parser.add_argument("output_dir", help="Directory to write the output file")

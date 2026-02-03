@@ -8,11 +8,11 @@ from extract_photos.utils import make_safe_folder_name
 def process_videos_in_directory(
     input_directory: str,
     output_directory: str,
-    step_time: int,
+    step_time: float,
     border_px: int = 5,
     min_photo_pct: int = 25,
-    **kwargs,
-):
+    **kwargs: object,
+) -> None:
     """
     Processes all videos in the specified directory. For each video, it creates a subdirectory
     named after the video's filename and extracts photos into that folder.

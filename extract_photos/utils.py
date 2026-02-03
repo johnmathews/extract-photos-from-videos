@@ -33,7 +33,7 @@ def make_safe_folder_name(title: str) -> str:
     return title
 
 
-def setup_logger(log_file):
+def setup_logger(log_file: str) -> logging.Logger:
     """
     Set up a logger for a specific worker.
     """
@@ -48,7 +48,7 @@ def setup_logger(log_file):
     return logger
 
 
-def is_valid_photo(image, std_threshold=5.0):
+def is_valid_photo(image: np.ndarray, std_threshold: float = 5.0) -> bool:
     """
     Check if the photo is valid:
     - Minimum dimensions: 1000x1000 pixels.

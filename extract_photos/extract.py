@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -22,24 +23,24 @@ HASH_DIFF_THRESHOLD = 10  # hamming distance out of 64 bits — for first-detect
 HASH_STEP_THRESHOLD = 3  # step-to-step threshold — same photo has distance 0-2
 
 
-def _ts():
+def _ts() -> str:
     """Return current wall-clock time as HH:MM:SS string."""
     return datetime.now().strftime("%H:%M:%S")
 
 
-def compute_frame_hash(frame):
+def compute_frame_hash(frame: np.ndarray) -> np.ndarray:
     """Compute an average perceptual hash of a frame (64-bit boolean array)."""
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if len(frame.shape) == 3 else frame
     resized = cv2.resize(gray, (HASH_SIZE, HASH_SIZE), interpolation=cv2.INTER_AREA)
     return resized > resized.mean()
 
 
-def hash_difference(hash1, hash2):
+def hash_difference(hash1: np.ndarray, hash2: np.ndarray) -> int:
     """Hamming distance between two perceptual hashes."""
     return np.count_nonzero(hash1 != hash2)
 
 
-def detect_almost_uniform_borders(frame, border_width=5, threshold=10):
+def detect_almost_uniform_borders(frame: np.ndarray, border_width: int = 5, threshold: float = 10) -> bool:
     """
     Checks if a frame has almost uniform borders.
 
@@ -78,7 +79,7 @@ def detect_almost_uniform_borders(frame, border_width=5, threshold=10):
     return is_left_uniform and is_right_uniform and is_top_uniform and is_bottom_uniform
 
 
-def _is_near_uniform(image, std_threshold=5.0):
+def _is_near_uniform(image: np.ndarray, std_threshold: float = 5.0) -> str | None:
     """Return a rejection reason if the image is near-uniform (solid color with noise), else None.
 
     Converts to grayscale and checks overall standard deviation.
@@ -91,7 +92,7 @@ def _is_near_uniform(image, std_threshold=5.0):
     return None
 
 
-def _is_screenshot(image, color_count_threshold=100, sample_size=128):
+def _is_screenshot(image: np.ndarray, color_count_threshold: int = 100, sample_size: int = 128) -> str | None:
     """Return a rejection reason if the image looks like a screenshot/UI, else None.
 
     Downscales to sample_size x sample_size, quantizes colors to 32 levels per channel,
@@ -114,8 +115,9 @@ def _is_screenshot(image, color_count_threshold=100, sample_size=128):
     return None
 
 
-def _read_ffmpeg_progress(process, duration_us, progress_list, index):
+def _read_ffmpeg_progress(process: subprocess.Popen[bytes], duration_us: float, progress_list: list[float], index: int) -> None:
     """Read ffmpeg -progress output and update progress_list[index] with percentage."""
+    assert process.stdout is not None
     for raw_line in process.stdout:
         line = raw_line.decode("utf-8", errors="replace").strip()
         if line.startswith("out_time_us="):
@@ -127,7 +129,7 @@ def _read_ffmpeg_progress(process, duration_us, progress_list, index):
                 progress_list[index] = min(current_us / duration_us * 100, 100)
 
 
-def transcode_lowres(video_file, video_duration_sec):
+def transcode_lowres(video_file: str, video_duration_sec: float) -> str:
     """Transcode a video to 320px wide low-res copy for fast scanning.
 
     Splits the video in half and transcodes both halves in parallel,
@@ -249,7 +251,7 @@ def transcode_lowres(video_file, video_duration_sec):
     return concat_out.name
 
 
-def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
+def scan_for_photos(lowres_path: str, fps: int, step_time: float, filename: str, video_duration_sec: float) -> list[tuple[float, str]]:
     """Scan the low-res video for frames containing photos.
 
     Steps through frames at step_time intervals, detects uniform borders,
@@ -360,7 +362,7 @@ def scan_for_photos(lowres_path, fps, step_time, filename, video_duration_sec):
     return photo_timestamps
 
 
-def _rejection_reason(image, min_photo_area=0):
+def _rejection_reason(image: np.ndarray, min_photo_area: int = 0) -> str | None:
     """Return a rejection reason string, or None if the image is valid."""
     h, w = image.shape[:2]
     if min_photo_area > 0 and w * h < min_photo_area:
@@ -374,7 +376,7 @@ def _rejection_reason(image, min_photo_area=0):
     return None
 
 
-def get_video_metadata(video_file):
+def get_video_metadata(video_file: str) -> tuple[int, float, int, int]:
     """Get video fps, duration, and frame dimensions using ffprobe.
 
     Returns (fps, duration_sec, width, height) tuple.
@@ -437,8 +439,8 @@ def get_video_metadata(video_file):
 
 
 def extract_fullres_frames(
-    video_file, output_folder, photo_timestamps, filename, logger, border_px=5, min_photo_area=0
-):
+    video_file: str, output_folder: str, photo_timestamps: list[tuple[float, str]], filename: str, logger: logging.Logger, border_px: int = 5, min_photo_area: int = 0
+) -> int:
     """Extract full-resolution frames at the given timestamps from the original video.
 
     Uses ffmpeg to seek and decode each frame (works with any codec including AV1),
@@ -504,7 +506,7 @@ def extract_fullres_frames(
     return saved_count
 
 
-def transcode_for_playback(video_file, output_dir):
+def transcode_for_playback(video_file: str, output_dir: str) -> str:
     """Transcode video to H.264/MP4 if needed for Immich playback compatibility.
 
     Checks the video codec via ffprobe. If already H.264 or HEVC, copies the
@@ -595,8 +597,8 @@ def transcode_for_playback(video_file, output_dir):
 
 
 def extract_photos_from_video(
-    video_file, output_folder, step_time, filename, border_px=5, min_photo_pct=25
-):
+    video_file: str, output_folder: str, step_time: float, filename: str, border_px: int = 5, min_photo_pct: int = 25
+) -> None:
     """Extract photos from a video using a three-phase pipeline:
     1. Transcode to low-res temp file
     2. Scan low-res for photo timestamps

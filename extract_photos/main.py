@@ -6,7 +6,7 @@ import os
 from extract_photos.batch_processor import process_videos_in_directory
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Extract photos with borders from videos in a directory."
     )

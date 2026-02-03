@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 
-def _find_text_gap_from_edge(density, content_fraction=0.3, min_gap_px=10):
+def _find_text_gap_from_edge(density: np.ndarray, content_fraction: float = 0.3, min_gap_px: int = 10) -> int:
     """
     Given a 1D density profile (from one edge inward), detect a text-gap-photo pattern.
 
@@ -51,7 +51,7 @@ def _find_text_gap_from_edge(density, content_fraction=0.3, min_gap_px=10):
     return gap_width
 
 
-def _detect_text_padding(cropped_gray, border_gray_value, border_diff_threshold=30, content_fraction=0.3, min_gap_px=10):
+def _detect_text_padding(cropped_gray: np.ndarray, border_gray_value: int, border_diff_threshold: int = 30, content_fraction: float = 0.3, min_gap_px: int = 10) -> tuple[int, int, int, int]:
     """
     Detect text/watermark near edges and return extra padding needed per side.
 
@@ -73,7 +73,7 @@ def _detect_text_padding(cropped_gray, border_gray_value, border_diff_threshold=
     return extra_top, extra_bottom, extra_left, extra_right
 
 
-def trim_and_add_border(image, border_px=5, uniformity_threshold=10):
+def trim_and_add_border(image: np.ndarray, border_px: int = 5, uniformity_threshold: int = 10) -> np.ndarray:
     """
     Trims uniform borders from an image using edge-scanning, then adds a
     fixed-size border in the original border color.

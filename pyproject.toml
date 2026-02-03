@@ -14,8 +14,12 @@ dependencies = [
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
-line-length = 120
-max-line-length = 120
+typeCheckingMode = "standard"
+exclude = ["tests"]
+# numpy stubs have overload-resolution issues with opencv array types;
+# downgrade so pyright still exits cleanly.
+reportCallIssue = "warning"
+reportArgumentType = "warning"
 
 [tool.flake8]
 max-line-length = 120
@@ -37,6 +41,7 @@ skip_empty = true
 
 [dependency-groups]
 dev = [
+    "pyright>=1.1.408",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
 ]

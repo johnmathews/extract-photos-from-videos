@@ -104,6 +104,7 @@ def find_or_create_album(api_url: str, api_key: str, album_name: str) -> str:
             if album.get("albumName") == album_name:
                 return album["id"]
     result = immich_request(url, api_key, method="POST", data={"albumName": album_name})
+    assert isinstance(result, dict), f"Unexpected response creating album: {result}"
     return result["id"]
 
 
