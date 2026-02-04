@@ -88,6 +88,7 @@ uv run python -m extract_photos.main INPUT_DIR [options]
 | `-s, --step_time`           | `0.5`              | Seconds between sampled frames                       |
 | `-b, --border_px`           | `5`                | Border size in pixels to add around extracted photos |
 | `--min-photo-pct`           | `25`               | Minimum photo area as % of video frame area          |
+| `--include-text` / `--no-include-text` | `yes`   | Include text/annotations next to photos; use `--no-include-text` to crop them out |
 
 ### Examples
 
@@ -199,6 +200,8 @@ epm input_file=VIDEO [output_dir=DIR] [options]
 | ------------------- | ------- | -------------------------------------------------------- |
 | `step_time=SECONDS` | `0.5`   | Seconds between sampled frames                           |
 | `border_px=INT`     | `5`     | Border size in pixels to add around extracted photos     |
+| `min_photo_pct=INT` | `25`    | Minimum photo area as % of video frame area              |
+| `include_text=BOOL` | `true`  | Include text/annotations next to photos                  |
 | `update_immich=BOOL`| `true`  | Run Immich integration (rescan, album creation, sharing) |
 | `help`              |         | Show usage                                               |
 
