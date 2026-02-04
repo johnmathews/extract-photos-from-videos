@@ -1,33 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SSH_HOST="media"
-
 usage() {
   cat <<USAGE
-Extract Photos from Movie file, on the media VM.
+Extract Photos from Movie file, on a remote host.
 
 Examples:
   epm "/data/videos/Photographer-Title_of_Video-[abc123].mkv"
   epm "/data/videos/sunset.mp4" step_time=1.0 border_px=10
   epm "/data/videos/sunset.mp4" output_dir=/data/photos update_immich=false
+  epm "/data/videos/sunset.mp4" host=immich_lxc
 
 Usage: epm "VIDEO" [output_dir=DIR] [options]
 
 Arguments:
-  VIDEO              Path to the video file on the media VM (positional).
+  VIDEO              Path to the video file on the remote host (positional).
                      Quote paths containing special characters (e.g. brackets).
-  output_dir=DIR     Directory on the media VM to copy extracted photos into
+  output_dir=DIR     Directory on the remote host to copy extracted photos into
                      (default: /mnt/nfs/photos/reference)
 
 Options:
+  host=NAME                Remote host to run on: media_vm (default) or immich_lxc
   step_time=SECONDS        Time between sampled frames (default: 0.5)
   border_px=INT            Border size in pixels around extracted photos (default: 5)
   min_photo_pct=INT        Minimum photo area as % of video frame area (default: 25)
   update_immich=BOOL       Run Immich integration after extraction (default: true)
   help                     Show this help message
 
-Environment variables (set on the media VM):
+Environment variables (set on the remote host):
   IMMICH_API_KEY         Immich API key (required for Immich integration)
   IMMICH_LIBRARY_ID      Immich external library ID to scan
   IMMICH_API_URL         Immich server URL (e.g. http://localhost:2283)
@@ -36,7 +36,7 @@ Environment variables (set on the media VM):
   PUSHOVER_APP_TOKEN     Pushover application API token (optional)
 
 Prerequisites:
-  ssh media must be configured and working.
+  ssh media (for media_vm) or ssh immich (for immich_lxc) must be configured.
   The repo and dependencies are auto-installed on first run.
 USAGE
 }
@@ -45,6 +45,7 @@ USAGE
 VIDEO=""
 OUTPUT="/mnt/nfs/photos/reference"
 UPDATE_IMMICH="true"
+HOST_LABEL=""
 EXTRA_ARGS=()
 
 for arg in "$@"; do
@@ -58,6 +59,9 @@ for arg in "$@"; do
     ;;
   output_dir=*)
     OUTPUT="${arg#output_dir=}"
+    ;;
+  host=*)
+    HOST_LABEL="${arg#host=}"
     ;;
   step_time=*)
     EXTRA_ARGS+=("-s" "${arg#step_time=}")
@@ -84,6 +88,17 @@ for arg in "$@"; do
   esac
 done
 
+# Map host label to SSH host
+HOST_LABEL="${HOST_LABEL:-media_vm}"
+case "$HOST_LABEL" in
+  media_vm)    SSH_HOST="media" ;;
+  immich_lxc)  SSH_HOST="immich" ;;
+  *)
+    echo "Error: unknown host '$HOST_LABEL' (expected media_vm or immich_lxc)" >&2
+    exit 1
+    ;;
+esac
+
 # Read input_file from stdin if piped and not provided as argument
 if [[ -z "$VIDEO" ]] && ! [ -t 0 ]; then
   read -r VIDEO || true
@@ -100,7 +115,7 @@ fi
 
 # --- Banner ---
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "📸 Extracting photos from video"
+echo "📸 Extracting photos from video (on $HOST_LABEL)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # --- Auto-setup on remote ---
