@@ -53,16 +53,46 @@ def _parse_expected_timestamps(path):
 def _parse_edge_case_timestamps(path):
     """Parse edge-cases.txt and return a list of (label, seconds) tuples.
 
-    Finds all MM:SS timestamps anywhere in the file.
+    Finds all MM:SS timestamps in the file, excluding those in the "should be
+    rejected" section.
     """
     timestamps = []
+    in_rejection_section = False
     with open(path) as f:
         for line in f:
+            if "should be rejected" in line.lower():
+                in_rejection_section = True
+                continue
+            # A new section header (non-blank line without timestamps) ends the rejection section
+            if in_rejection_section and line.strip() and not re.search(r"\d+:\d+", line):
+                in_rejection_section = False
+            if in_rejection_section:
+                continue
             for m in re.finditer(r"(\d+):(\d+)", line):
                 minutes, seconds = int(m.group(1)), int(m.group(2))
                 total_sec = minutes * 60 + seconds
                 label = m.group(0)
                 timestamps.append((label, total_sec))
+    return timestamps
+
+
+def _parse_rejection_timestamps(path):
+    """Parse edge-cases.txt and return timestamps from the 'should be rejected' section."""
+    timestamps = []
+    in_rejection_section = False
+    with open(path) as f:
+        for line in f:
+            if "should be rejected" in line.lower():
+                in_rejection_section = True
+                continue
+            if in_rejection_section and line.strip() and not re.search(r"\d+:\d+", line):
+                in_rejection_section = False
+            if in_rejection_section:
+                for m in re.finditer(r"(\d+):(\d+)", line):
+                    minutes, seconds = int(m.group(1)), int(m.group(2))
+                    total_sec = minutes * 60 + seconds
+                    label = m.group(0)
+                    timestamps.append((label, total_sec))
     return timestamps
 
 
@@ -175,4 +205,42 @@ class TestVideoIntegration:
 
         assert saved == len(matched_candidates), (
             f"Expected {len(matched_candidates)} edge-case photos saved, got {saved}"
+        )
+
+    @pytest.fixture(scope="class")
+    def rejection_timestamps(self):
+        if not os.path.isfile(EDGE_CASES_FILE):
+            pytest.skip("edge-cases.txt not present")
+        timestamps = _parse_rejection_timestamps(EDGE_CASES_FILE)
+        if not timestamps:
+            pytest.skip("No rejection timestamps in edge-cases.txt")
+        return timestamps
+
+    def test_ui_screens_rejected_at_extraction(self, scan_results, rejection_timestamps, video_metadata):
+        """UI/screenshot frames should be rejected during extraction (saved == 0)."""
+        _fps, _duration, frame_w, frame_h = video_metadata
+        min_photo_area = int(frame_w * frame_h * 25 / 100)
+
+        # Find scan results near rejection timestamps
+        matched_candidates = []
+        for label, exp_sec in rejection_timestamps:
+            matches = [(ts, ts_str) for ts, ts_str in scan_results if abs(ts - exp_sec) <= TOLERANCE_SEC]
+            if matches:
+                closest = min(matches, key=lambda m: abs(m[0] - exp_sec))
+                matched_candidates.append(closest)
+
+        if not matched_candidates:
+            pytest.skip("No rejection timestamps found in scan results")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = os.path.join(tmpdir, "test.log")
+            logger = setup_logger(log_file)
+            saved = extract_fullres_frames(
+                TEST_VIDEO, tmpdir, matched_candidates, "test.mp4", logger,
+                min_photo_area=min_photo_area,
+            )
+
+        assert saved == 0, (
+            f"Expected 0 photos saved from UI screens, got {saved} "
+            f"(timestamps: {[label for label, _ in rejection_timestamps]})"
         )

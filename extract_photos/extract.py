@@ -154,17 +154,42 @@ def _is_near_uniform(image: np.ndarray, std_threshold: float = 5.0) -> str | Non
     return None
 
 
+def _white_background_percentage(image: np.ndarray, sample_size: int = 128, brightness_threshold: int = 240) -> float:
+    """Return percentage of near-white pixels in the image.
+
+    Downscales to sample_size x sample_size grayscale and counts pixels above
+    brightness_threshold. UI/screenshot frames typically have large white
+    backgrounds (40-70%+), while photos rarely exceed 10%.
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+    small = cv2.resize(gray, (sample_size, sample_size), interpolation=cv2.INTER_AREA)
+    white_pixels = np.count_nonzero(small > brightness_threshold)
+    return white_pixels / (sample_size * sample_size) * 100
+
+
 def _is_screenshot(image: np.ndarray, color_count_threshold: int = 100, sample_size: int = 128) -> str | None:
     """Return a rejection reason if the image looks like a screenshot/UI, else None.
 
-    Downscales to sample_size x sample_size, quantizes colors to 32 levels per channel,
-    and counts unique color combinations. Photos typically have 100+ unique quantized
-    colors at 128x128; screenshots with flat UI regions have 4-30 unique colors.
-    Skips grayscale images (can't reliably classify without color info).
+    Two-stage detection:
+    1. White-background check: rejects images with >30% near-white pixels (>240
+       brightness at 128x128). UI screens have large white backgrounds (40-70%);
+       photos rarely exceed 10%. Runs before the grayscale skip to catch both
+       color and near-grayscale UI screens.
+    2. Color-count check: downscales to sample_size x sample_size, quantizes colors
+       to 32 levels per channel, and counts unique combinations. Simple screenshots
+       with flat UI regions have 4-30 unique colors; photos have 100+.
+       Skips grayscale images (can't reliably classify without color info).
     """
     if len(image.shape) < 3 or image.shape[2] < 3:
         return None
     small = cv2.resize(image, (sample_size, sample_size), interpolation=cv2.INTER_AREA)
+    # Stage 1: White-background detection. Runs before the grayscale skip because
+    # some UI screens (e.g. template galleries) appear nearly grayscale but have
+    # distinctive white backgrounds that photos don't.
+    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    white_pct = np.count_nonzero(gray > 240) / (sample_size * sample_size) * 100
+    if white_pct > 30.0:
+        return f"screenshot ({white_pct:.0f}% white background)"
     # Skip effectively-grayscale 3-channel images (e.g. B&W photos from video).
     # Same rationale as the single-channel skip above: can't reliably distinguish
     # a B&W photo from a B&W screenshot using color diversity alone.
@@ -176,6 +201,7 @@ def _is_screenshot(image: np.ndarray, color_count_threshold: int = 100, sample_s
     ) / 3
     if mean_channel_diff < 10.0:
         return None
+    # Stage 2: Color-count detection for simple flat-color screenshots.
     quantized = small // 8  # 256 / 8 = 32 levels per channel
     # Pack RGB into a single int per pixel for fast unique counting
     r = quantized[:, :, 0].astype(np.uint32)

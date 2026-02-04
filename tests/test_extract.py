@@ -12,6 +12,7 @@ from extract_photos.extract import (
     _lowres_encode_args,
     _playback_encode_args,
     _rejection_reason,
+    _white_background_percentage,
     compute_frame_hash,
     detect_almost_uniform_borders,
     hash_difference,
@@ -235,6 +236,70 @@ class TestIsScreenshot:
         img[100:200, 0:100] = [0, 0, 255]
         img[100:200, 100:200] = [255, 255, 0]
         assert _is_screenshot(img) is not None
+
+    def test_complex_ui_with_white_background_rejected(self):
+        """A UI screen with many colors (thumbnails, gradients) but white background."""
+        rng = np.random.RandomState(42)
+        # Start with mostly white background
+        img = np.full((400, 400, 3), 250, dtype=np.uint8)
+        # Add photo thumbnails (high color diversity)
+        img[50:150, 50:150] = rng.randint(0, 256, (100, 100, 3), dtype=np.uint8)
+        img[50:150, 200:300] = rng.randint(0, 256, (100, 100, 3), dtype=np.uint8)
+        img[200:300, 50:150] = rng.randint(0, 256, (100, 100, 3), dtype=np.uint8)
+        # Add colored UI elements
+        img[0:30, :] = [40, 40, 50]  # dark nav bar
+        img[350:370, 100:300] = [0, 100, 200]  # blue button
+        # This has many unique colors from the thumbnails but >30% white background
+        result = _is_screenshot(img)
+        assert result is not None
+        assert "white background" in result
+
+    def test_complex_ui_with_near_grayscale_rejected(self):
+        """A near-grayscale UI screen with white background should be caught."""
+        # Mostly white with gray text/UI elements (mean_channel_diff < 10)
+        img = np.full((400, 400, 3), 248, dtype=np.uint8)
+        # Gray text and UI elements
+        img[20:25, 50:200] = [80, 80, 82]  # nav text
+        img[100:250, 30:370] = [220, 222, 220]  # content panel
+        img[300:350, 50:350] = [200, 200, 202]  # footer
+        result = _is_screenshot(img)
+        assert result is not None
+        assert "white background" in result
+
+
+class TestWhiteBackgroundPercentage:
+    def test_solid_white_100_percent(self):
+        img = np.full((200, 200, 3), 255, dtype=np.uint8)
+        assert _white_background_percentage(img) > 99.0
+
+    def test_solid_black_0_percent(self):
+        img = np.zeros((200, 200, 3), dtype=np.uint8)
+        assert _white_background_percentage(img) < 1.0
+
+    def test_half_white_half_dark(self):
+        img = np.zeros((200, 200, 3), dtype=np.uint8)
+        img[:100, :, :] = 255  # top half white
+        pct = _white_background_percentage(img)
+        assert 40.0 < pct < 60.0
+
+    def test_random_photo_low_white(self):
+        rng = np.random.RandomState(42)
+        img = rng.randint(0, 200, (200, 200, 3), dtype=np.uint8)
+        assert _white_background_percentage(img) < 5.0
+
+    def test_grayscale_input(self):
+        img = np.full((200, 200), 250, dtype=np.uint8)
+        assert _white_background_percentage(img) > 90.0
+
+    def test_ui_like_white_background(self):
+        """UI screen: mostly white with some dark content areas."""
+        img = np.full((200, 200, 3), 250, dtype=np.uint8)
+        # Add some dark UI elements (nav bar, sidebar)
+        img[0:20, :] = [50, 50, 50]  # nav bar
+        img[:, 0:30] = [60, 60, 60]  # sidebar
+        img[80:120, 50:150] = [100, 120, 140]  # content area
+        pct = _white_background_percentage(img)
+        assert pct > 30.0
 
 
 class TestRejectionReason:
