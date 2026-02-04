@@ -22,6 +22,74 @@ HASH_SIZE = 8
 HASH_DIFF_THRESHOLD = 10  # hamming distance out of 64 bits — for first-detection
 HASH_STEP_THRESHOLD = 3  # step-to-step threshold — same photo has distance 0-2
 
+VAAPI_DEVICE = "/dev/dri/renderD128"
+_vaapi_available: bool | None = None
+
+
+def _is_vaapi_available() -> bool:
+    """Check if VAAPI hardware acceleration is available.
+
+    Fast path: returns False immediately if the render device doesn't exist.
+    Slow path: runs a minimal ffmpeg encode probe to verify the GPU works.
+    Result is cached for the lifetime of the process.
+    """
+    global _vaapi_available
+    if _vaapi_available is not None:
+        return _vaapi_available
+
+    if not os.path.exists(VAAPI_DEVICE):
+        _vaapi_available = False
+        return False
+
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-vaapi_device", VAAPI_DEVICE,
+                "-f", "lavfi", "-i", "nullsrc=s=16x16:d=1",
+                "-vf", "format=nv12,hwupload",
+                "-c:v", "h264_vaapi", "-frames:v", "1",
+                "-f", "null", "-",
+            ],
+            capture_output=True,
+            timeout=10,
+        )
+        _vaapi_available = True
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        _vaapi_available = False
+
+    return _vaapi_available
+
+
+def _lowres_encode_args() -> list[str]:
+    """Return ffmpeg encode arguments for low-res transcoding."""
+    if _is_vaapi_available():
+        return [
+            "-vaapi_device", VAAPI_DEVICE,
+            "-vf", "format=nv12,hwupload,scale_vaapi=w=320:h=-2",
+            "-c:v", "h264_vaapi", "-qp", "25", "-an",
+        ]
+    return ["-vf", "scale=320:-2", "-an", "-q:v", "5"]
+
+
+def _playback_encode_args(input_height: int) -> list[str]:
+    """Return ffmpeg encode arguments for playback transcoding."""
+    if _is_vaapi_available():
+        if input_height > 1080:
+            vf = "format=nv12,hwupload,scale_vaapi=w=-2:h=1080"
+        else:
+            vf = "format=nv12,hwupload"
+        return [
+            "-vaapi_device", VAAPI_DEVICE,
+            "-vf", vf,
+            "-c:v", "h264_vaapi", "-qp", "28",
+            "-c:a", "aac", "-b:a", "128k",
+        ]
+    return [
+        "-vf", "scale=-2:'min(1080,ih)'",
+        "-c:v", "libx264", "-crf", "28", "-preset", "faster",
+        "-c:a", "aac", "-b:a", "128k",
+    ]
+
 
 def _ts() -> str:
     """Return current wall-clock time as HH:MM:SS string."""
@@ -151,7 +219,7 @@ def transcode_lowres(video_file: str, video_duration_sec: float) -> str:
     midpoint = video_duration_sec / 2
 
     progress_args = ["-progress", "pipe:1", "-nostats"]
-    scale_args = ["-vf", "scale=320:-2", "-an", "-q:v", "5"]
+    scale_args = _lowres_encode_args()
 
     tmp1 = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     tmp1.close()
@@ -533,16 +601,18 @@ def transcode_for_playback(video_file: str, output_dir: str) -> str:
     """
     basename = os.path.basename(video_file)
 
-    # Get codec name via ffprobe
+    # Get codec name and height via ffprobe
     codec_cmd = [
         "ffprobe", "-v", "quiet", "-select_streams", "v:0",
-        "-show_entries", "stream=codec_name", "-of", "csv=p=0", video_file,
+        "-show_entries", "stream=codec_name,height", "-of", "csv=p=0", video_file,
     ]
     try:
         codec_result = subprocess.run(codec_cmd, capture_output=True, check=True, text=True)
     except FileNotFoundError:
         raise RuntimeError("ffprobe not found. Install ffmpeg to use this tool.")
-    codec = codec_result.stdout.strip()
+    probe_fields = codec_result.stdout.strip().split(",")
+    codec = probe_fields[0] if probe_fields else ""
+    input_height = int(probe_fields[1]) if len(probe_fields) > 1 and probe_fields[1].strip().isdigit() else 0
 
     if re.match(r"^(h264|hevc)$", codec, re.IGNORECASE):
         dest = os.path.join(output_dir, basename)
@@ -561,17 +631,15 @@ def transcode_for_playback(video_file: str, output_dir: str) -> str:
     out_name = os.path.splitext(basename)[0] + ".mp4"
     out_path = os.path.join(output_dir, out_name)
 
-    print(f"Transcoding video ({codec} -> H.264/MP4) for Immich compatibility...", file=sys.stderr, flush=True)
+    accel = "VAAPI" if _is_vaapi_available() else "software"
+    print(f"Transcoding video ({codec} -> H.264/MP4, {accel}) for Immich compatibility...", file=sys.stderr, flush=True)
 
-    cmd = [
-        "ffmpeg", "-i", video_file,
-        "-vf", "scale=-2:'min(1080,ih)'",
-        "-c:v", "libx264", "-crf", "28", "-preset", "faster",
-        "-c:a", "aac", "-b:a", "128k",
-        "-map_metadata", "0",
-        "-progress", "pipe:1", "-nostats",
-        out_path, "-y",
-    ]
+    encode_args = _playback_encode_args(input_height)
+    cmd = (
+        ["ffmpeg", "-i", video_file]
+        + encode_args
+        + ["-map_metadata", "0", "-progress", "pipe:1", "-nostats", out_path, "-y"]
+    )
 
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
@@ -637,6 +705,7 @@ def extract_photos_from_video(
     logger.info(
         f"fps: {fps}, duration: {format_time(video_duration_sec)}, step_time: {step_time}s"
     )
+    logger.info(f"Acceleration: {'VAAPI' if _is_vaapi_available() else 'software'}")
 
     # Phase 1: Transcode to low-res
     print(f"{_ts()} [1/3] Transcoding to low resolution...", flush=True)

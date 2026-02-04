@@ -17,8 +17,11 @@ uv run python -m extract_photos.main "/path/to/video/directory"
 # Run with options
 uv run python -m extract_photos.main "/path/to/videos" -s 1.0 -b 10 --min-photo-pct 25
 
-# Run on remote media VM (single video)
+# Run on remote host (single video, default: media_vm)
 epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
+
+# Run on a different remote host
+epm input_file=/data/videos/sunset.mp4 host=immich_lxc
 
 # Run type checking
 uv run pyright
@@ -49,7 +52,8 @@ transcode, scan, extract)
 
 Each video goes through three phases:
 
-1. **Transcode** — ffmpeg creates a 320px-wide low-res temp copy (no audio).
+1. **Transcode** — ffmpeg creates a 320px-wide low-res temp copy (no audio). Uses VAAPI hardware acceleration when
+   available (see below).
 2. **Scan** — Single-threaded scan of the low-res copy. Steps through frames at `step_time` intervals, detects uniform
    borders, rejects near-uniform frames (black/white screens), deduplicates via perceptual hashing. Uses both
    step-to-step comparison (threshold 3, detects back-to-back photo transitions) and first-detection comparison
@@ -65,8 +69,11 @@ Key modules in `extract_photos/`:
 - **batch_processor.py** - Scans directory for video files (.mp4/.mkv/.avi/.mov/.webm), creates per-video output
   subdirectories, calls extractor for each. Prompts skip-or-overwrite when a video's output directory already contains
   extracted photos (detected by presence of both `.jpg` and video files).
-- **extract.py** - Core logic. `transcode_lowres()` creates the low-res temp file via ffmpeg. `scan_for_photos()` scans
-  it single-threaded with progress display, rejecting near-uniform frames (black/white screens) before hashing.
+- **extract.py** - Core logic. `_is_vaapi_available()` detects VAAPI hardware acceleration at runtime (checks for
+  `/dev/dri/renderD128` then runs a minimal ffmpeg probe; cached per process). `_lowres_encode_args()` and
+  `_playback_encode_args()` return the appropriate ffmpeg arguments for software or VAAPI encoding.
+  `transcode_lowres()` creates the low-res temp file via ffmpeg. `scan_for_photos()` scans it single-threaded with
+  progress display, rejecting near-uniform frames (black/white screens) before hashing.
   `extract_fullres_frames()` seeks to each timestamp in the original video. `_rejection_reason()` validates extracted
   frames: checks minimum area (as % of video frame area, default 25%, tunable via `--min-photo-pct`), rejects
   near-uniform frames via `_is_near_uniform()` (grayscale std dev < 5.0), and rejects screenshots via `_is_screenshot()`
@@ -94,7 +101,8 @@ Key modules in `extract_photos/`:
 and `edge-cases.txt` (side-by-side photos and similar sequential photos). Used by the slow integration tests in
 `tests/test_video_integration.py`.
 
-**bin/epm** - Bash wrapper that SSHes into `media` VM to run the tool on a single video. Auto-installs repo/deps on first
+**bin/epm** - Bash wrapper that SSHes into a remote host to run the tool on a single video. Accepts `host=NAME` to select
+the target: `media_vm` (default, SSH host `media`) or `immich_lxc` (SSH host `immich`). Auto-installs repo/deps on first
 run and auto-updates (`git pull` + `uv sync`) on subsequent runs. Arguments with special shell characters (e.g. `[]` in
 filenames) must be quoted. Computes the sanitized output subdirectory name early (via `make_safe_folder_name`) and prompts
 skip-or-overwrite if it already contains extracted photos. Creates a temp dir with a symlink to bridge single-file input
@@ -105,6 +113,15 @@ optionally share it (when output is `/mnt/nfs/photos/reference` and Immich env v
 
 The tool creates `extracted_photos/` inside the input directory, with subdirectories per video. Photos are named with
 video name + timestamp. Each video subdirectory also has a `logs/` folder with a single log file per video.
+
+## Hardware acceleration
+
+Both `transcode_lowres()` and `transcode_for_playback()` automatically use VAAPI hardware encoding when a compatible GPU
+is available (e.g. Ryzen 5 Pro 4650G Vega iGPU on the Immich LXC). Detection is zero-config: checks for
+`/dev/dri/renderD128`, verifies with a minimal ffmpeg probe, and caches the result per process. On hosts without a GPU
+(e.g. media VM), the existing software pipeline (`libx264` / mjpeg) runs unchanged. The approach is software decode +
+hwupload + VAAPI scale/encode (`h264_vaapi` + `scale_vaapi`), which works regardless of input codec (important for
+YouTube AV1 videos that can't be HW-decoded on Vega).
 
 ## Dependencies
 

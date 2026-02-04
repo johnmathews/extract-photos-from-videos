@@ -1,8 +1,16 @@
+from unittest.mock import patch
+import subprocess
+
 import numpy as np
 
+import extract_photos.extract as extract_mod
 from extract_photos.extract import (
+    VAAPI_DEVICE,
     _is_near_uniform,
     _is_screenshot,
+    _is_vaapi_available,
+    _lowres_encode_args,
+    _playback_encode_args,
     _rejection_reason,
     compute_frame_hash,
     detect_almost_uniform_borders,
@@ -265,3 +273,105 @@ class TestRejectionReason:
         rng = np.random.RandomState(42)
         img = rng.randint(0, 256, (1200, 1200, 3), dtype=np.uint8)
         assert _rejection_reason(img) is None
+
+
+class TestVaapiDetection:
+    def setup_method(self):
+        """Reset the cached value before each test."""
+        extract_mod._vaapi_available = None
+
+    def teardown_method(self):
+        """Reset after each test to avoid leaking state."""
+        extract_mod._vaapi_available = None
+
+    def test_no_device_returns_false(self):
+        with patch("extract_photos.extract.os.path.exists", return_value=False):
+            assert _is_vaapi_available() is False
+
+    def test_device_exists_ffmpeg_succeeds(self):
+        with (
+            patch("extract_photos.extract.os.path.exists", return_value=True),
+            patch("extract_photos.extract.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = subprocess.CompletedProcess([], 0)
+            assert _is_vaapi_available() is True
+
+    def test_device_exists_ffmpeg_fails(self):
+        with (
+            patch("extract_photos.extract.os.path.exists", return_value=True),
+            patch("extract_photos.extract.subprocess.run", side_effect=subprocess.TimeoutExpired([], 10)),
+        ):
+            assert _is_vaapi_available() is False
+
+    def test_device_exists_ffmpeg_not_found(self):
+        with (
+            patch("extract_photos.extract.os.path.exists", return_value=True),
+            patch("extract_photos.extract.subprocess.run", side_effect=FileNotFoundError),
+        ):
+            assert _is_vaapi_available() is False
+
+    def test_result_is_cached(self):
+        with patch("extract_photos.extract.os.path.exists", return_value=False):
+            _is_vaapi_available()
+        # Second call should use cache, not check os.path.exists again
+        with patch("extract_photos.extract.os.path.exists", return_value=True):
+            assert _is_vaapi_available() is False  # still False from cache
+
+
+class TestVaapiArgs:
+    def teardown_method(self):
+        extract_mod._vaapi_available = None
+
+    def test_lowres_software(self):
+        extract_mod._vaapi_available = False
+        args = _lowres_encode_args()
+        assert "-vf" in args
+        assert "scale=320:-2" in args
+        assert "-an" in args
+
+    def test_lowres_vaapi(self):
+        extract_mod._vaapi_available = True
+        args = _lowres_encode_args()
+        assert "-vaapi_device" in args
+        assert VAAPI_DEVICE in args
+        assert "h264_vaapi" in args
+        assert any("scale_vaapi" in a for a in args)
+        assert "-an" in args
+
+    def test_playback_software(self):
+        extract_mod._vaapi_available = False
+        args = _playback_encode_args(1080)
+        assert "libx264" in args
+        assert "-crf" in args
+
+    def test_playback_software_no_upscale(self):
+        extract_mod._vaapi_available = False
+        args = _playback_encode_args(720)
+        assert "libx264" in args
+        # Software path always uses min(1080,ih) so no explicit 1080 scale
+        vf_idx = args.index("-vf")
+        assert "min(1080,ih)" in args[vf_idx + 1]
+
+    def test_playback_vaapi_downscale(self):
+        extract_mod._vaapi_available = True
+        args = _playback_encode_args(2160)
+        assert "-vaapi_device" in args
+        assert "h264_vaapi" in args
+        vf_idx = args.index("-vf")
+        assert "scale_vaapi" in args[vf_idx + 1]
+        assert "1080" in args[vf_idx + 1]
+
+    def test_playback_vaapi_no_scale(self):
+        extract_mod._vaapi_available = True
+        args = _playback_encode_args(720)
+        assert "-vaapi_device" in args
+        assert "h264_vaapi" in args
+        vf_idx = args.index("-vf")
+        assert "scale_vaapi" not in args[vf_idx + 1]
+
+    def test_playback_vaapi_at_1080(self):
+        extract_mod._vaapi_available = True
+        args = _playback_encode_args(1080)
+        vf_idx = args.index("-vf")
+        # Exactly 1080 should not scale
+        assert "scale_vaapi" not in args[vf_idx + 1]
