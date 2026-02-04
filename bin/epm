@@ -127,12 +127,29 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "📸 Extracting photos from video (on $HOST_LABEL)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+# --- Stable tmux session name (derived from video path) ---
+SESSION_NAME="epm-$(printf '%s' "$VIDEO" | shasum | cut -c1-8)"
+
+# --- Check for existing tmux session (reattach after disconnect) ---
+if ssh "$SSH_HOST" "tmux has-session -t $SESSION_NAME 2>/dev/null"; then
+    echo "Reattaching to running extraction..."
+    ssh -tt "$SSH_HOST" "tmux attach-session -t $SESSION_NAME" </dev/tty
+    exit 0
+fi
+
 # --- Auto-setup on remote ---
 echo "Checking remote setup..."
 ssh "$SSH_HOST" bash -l <<'SETUP'
 set -euo pipefail
 REPO_DIR="$HOME/extract-photos"
 REPO_URL="https://github.com/johnmathews/extract-photos-from-videos.git"
+
+# tmux is required for resilient remote execution
+if ! command -v tmux &>/dev/null; then
+    echo "Error: tmux is not installed on the remote machine." >&2
+    echo "Install it with: sudo apt install tmux (Debian/Ubuntu)" >&2
+    exit 1
+fi
 
 if [ ! -d "$REPO_DIR" ]; then
     echo "Setting up extract-photos on remote..."
@@ -292,8 +309,12 @@ else
 fi
 EXTRACTION
 
-# Execute with -tt so Ctrl-C kills the remote process. The trap cleans up
-# the temp script regardless of how the extraction exits.
-ssh -tt "$SSH_HOST" "trap 'rm -f $REMOTE_SCRIPT' EXIT; bash -l $REMOTE_SCRIPT $(printf '%q ' "$VIDEO" "$OUTPUT" "$UPDATE_IMMICH" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")" </dev/tty
+# Start extraction inside a tmux session for resilience against SSH drops.
+# If the connection is lost (e.g. laptop lid close), tmux keeps the process
+# alive. Re-running the same epm command reattaches to the running session.
+ssh "$SSH_HOST" "tmux new-session -d -s $SESSION_NAME \
+    \"trap 'rm -f $REMOTE_SCRIPT' EXIT; bash -l $REMOTE_SCRIPT $(printf '%q ' "$VIDEO" "$OUTPUT" "$UPDATE_IMMICH" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"); stty sane; echo; echo 'Press Enter to close.'; read\""
+
+ssh -tt "$SSH_HOST" "tmux attach-session -t $SESSION_NAME" </dev/tty
 
 echo "Done."

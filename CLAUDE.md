@@ -110,7 +110,11 @@ run and auto-updates (`git pull` + `uv sync`) on subsequent runs. Arguments with
 filenames) must be quoted. Computes the sanitized output subdirectory name early (via `make_safe_folder_name`) and prompts
 skip-or-overwrite if it already contains extracted photos. Creates a temp dir with a symlink to bridge single-file input
 to the tool's directory-based interface. After extraction, calls `immich.py` to scan the library, create an album, and
-optionally share it (when output is `/mnt/nfs/photos/reference` and Immich env vars are set).
+optionally share it (when output is `/mnt/nfs/photos/reference` and Immich env vars are set). Runs the extraction inside
+a tmux session on the remote host for resilience: if the SSH connection drops (e.g. laptop lid close), tmux keeps the
+process alive. Re-running the same epm command detects the existing tmux session and reattaches. The session name is
+derived from the video path (`epm-<hash>`). After the extraction finishes, the tmux session waits for Enter so the user
+can see the final output before the session closes. Requires tmux on the remote host (checked during auto-setup).
 
 ## Output structure
 
