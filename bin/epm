@@ -76,9 +76,9 @@ for arg in "$@"; do
   include_text=*)
     val="${arg#include_text=}"
     if [ "$val" = "true" ]; then
-        EXTRA_ARGS+=("--include-text")
+      EXTRA_ARGS+=("--include-text")
     else
-        EXTRA_ARGS+=("--no-include-text")
+      EXTRA_ARGS+=("--no-include-text")
     fi
     ;;
   update_immich=*)
@@ -98,14 +98,14 @@ for arg in "$@"; do
 done
 
 # Map host label to SSH host
-HOST_LABEL="${HOST_LABEL:-media_vm}"
+HOST_LABEL="${HOST_LABEL:-immich_lxc}"
 case "$HOST_LABEL" in
-  media_vm)    SSH_HOST="media" ;;
-  immich_lxc)  SSH_HOST="immich" ;;
-  *)
-    echo "Error: unknown host '$HOST_LABEL' (expected media_vm or immich_lxc)" >&2
-    exit 1
-    ;;
+media_vm) SSH_HOST="media" ;;
+immich_lxc) SSH_HOST="immich" ;;
+*)
+  echo "Error: unknown host '$HOST_LABEL' (expected media_vm or immich_lxc)" >&2
+  exit 1
+  ;;
 esac
 
 # Read input_file from stdin if piped and not provided as argument
