@@ -13,6 +13,7 @@ from extract_photos.immich import (
     parse_album_name,
     parse_video_timestamp,
     poll_for_assets,
+    purge_existing_assets,
     send_pushover,
     share_album,
     trigger_scan,
@@ -126,6 +127,45 @@ class TestTriggerScan:
         mock_req.assert_called_once_with("http://immich/api/libraries/lib-42/scan", "key", method="POST")
 
 
+class TestPurgeExistingAssets:
+    @patch("extract_photos.immich.immich_request")
+    def test_purges_found_assets(self, mock_req):
+        mock_req.side_effect = [
+            {"assets": {"items": [{"id": "a1"}, {"id": "a2"}]}},
+            None,  # DELETE response
+        ]
+        result = purge_existing_assets("http://immich", "key", "/photos/subdir/")
+        assert result == 2
+        assert mock_req.call_count == 2
+        mock_req.assert_called_with(
+            "http://immich/api/assets", "key", method="DELETE", data={"ids": ["a1", "a2"], "force": True}
+        )
+
+    @patch("extract_photos.immich.immich_request")
+    def test_returns_zero_when_none_found(self, mock_req):
+        mock_req.return_value = {"assets": {"items": []}}
+        result = purge_existing_assets("http://immich", "key", "/photos/subdir/")
+        assert result == 0
+        mock_req.assert_called_once()  # Only the search call, no DELETE
+
+    @patch("extract_photos.immich.immich_request")
+    def test_handles_non_dict_response(self, mock_req):
+        mock_req.return_value = None
+        result = purge_existing_assets("http://immich", "key", "/photos/subdir/")
+        assert result == 0
+
+    @patch("extract_photos.immich.immich_request")
+    def test_sends_with_deleted_flag(self, mock_req):
+        mock_req.return_value = {"assets": {"items": []}}
+        purge_existing_assets("http://immich", "key", "/photos/subdir/")
+        mock_req.assert_called_once_with(
+            "http://immich/api/search/metadata",
+            "key",
+            method="POST",
+            data={"originalPath": "/photos/subdir/", "withDeleted": True},
+        )
+
+
 class TestPollForAssets:
     @patch("extract_photos.immich.time.sleep")
     @patch("extract_photos.immich.time.monotonic")
@@ -204,6 +244,18 @@ class TestPollForAssets:
         mock_req.return_value = {"assets": {"items": [{"id": "a1"}, {"id": "a2"}]}}
         result = poll_for_assets("http://immich", "key", "/path/", expected_count=5)
         assert len(result) == 2
+
+    @patch("extract_photos.immich.time.sleep")
+    @patch("extract_photos.immich.time.monotonic")
+    @patch("extract_photos.immich.immich_request")
+    def test_returns_empty_on_stable_zero(self, mock_req, mock_mono, mock_sleep):
+        # Empty results stabilise across 4 polls — exits early, not full timeout
+        # prev_count starts at 0, so first empty poll already counts as stable
+        mock_mono.side_effect = [0, 5, 10, 15]
+        mock_req.return_value = {"assets": {"items": []}}
+        result = poll_for_assets("http://immich", "key", "/path/", expected_count=5)
+        assert result == []
+        assert mock_sleep.call_count == 3  # 4 polls, 3 sleeps
 
     @patch("extract_photos.immich.time.sleep")
     @patch("extract_photos.immich.time.monotonic")
@@ -484,7 +536,8 @@ class TestMain:
     @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
     @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}, {"id": "a2"}])
     @patch("extract_photos.immich.trigger_scan")
-    def test_full_flow_with_share(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push):
+    @patch("extract_photos.immich.purge_existing_assets", return_value=0)
+    def test_full_flow_with_share(self, mock_purge, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push):
         from extract_photos.immich import main
 
         mock_add.return_value = [{"id": "a1", "success": True}, {"id": "a2", "success": True}]
@@ -520,7 +573,8 @@ class TestMain:
     @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
     @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}])
     @patch("extract_photos.immich.trigger_scan")
-    def test_no_share_without_flag(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push, capsys):
+    @patch("extract_photos.immich.purge_existing_assets", return_value=0)
+    def test_no_share_without_flag(self, mock_purge, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push, capsys):
         from extract_photos.immich import main
 
         mock_add.return_value = [{"id": "a1", "success": True}]
@@ -547,7 +601,8 @@ class TestMain:
     @patch("extract_photos.immich.find_or_create_album")
     @patch("extract_photos.immich.poll_for_assets", return_value=[])
     @patch("extract_photos.immich.trigger_scan")
-    def test_exits_when_no_assets_found(self, mock_scan, mock_poll, mock_album):
+    @patch("extract_photos.immich.purge_existing_assets", return_value=0)
+    def test_exits_when_no_assets_found(self, mock_purge, mock_scan, mock_poll, mock_album):
         from extract_photos.immich import main
 
         args = [
@@ -569,7 +624,8 @@ class TestMain:
     @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
     @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}])
     @patch("extract_photos.immich.trigger_scan", side_effect=Exception("connection refused"))
-    def test_exits_on_scan_failure(self, mock_scan, mock_poll, mock_album, mock_add):
+    @patch("extract_photos.immich.purge_existing_assets", return_value=0)
+    def test_exits_on_scan_failure(self, mock_purge, mock_scan, mock_poll, mock_album, mock_add):
         import urllib.error
 
         from extract_photos.immich import main
@@ -596,7 +652,8 @@ class TestMain:
     @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
     @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}])
     @patch("extract_photos.immich.trigger_scan")
-    def test_skips_share_when_user_not_found(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push):
+    @patch("extract_photos.immich.purge_existing_assets", return_value=0)
+    def test_skips_share_when_user_not_found(self, mock_purge, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push):
         from extract_photos.immich import main
 
         mock_add.return_value = [{"id": "a1", "success": True}]
@@ -624,7 +681,8 @@ class TestMain:
     @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
     @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}])
     @patch("extract_photos.immich.trigger_scan")
-    def test_trailing_slash_stripped_from_api_url(self, mock_scan, mock_poll, mock_album, mock_add):
+    @patch("extract_photos.immich.purge_existing_assets", return_value=0)
+    def test_trailing_slash_stripped_from_api_url(self, mock_purge, mock_scan, mock_poll, mock_album, mock_add):
         from extract_photos.immich import main
 
         mock_add.return_value = [{"id": "a1", "success": True}]
@@ -653,7 +711,8 @@ class TestMain:
     @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
     @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}, {"id": "a2"}, {"id": "a3"}])
     @patch("extract_photos.immich.trigger_scan")
-    def test_pushover_sent_with_all_args(self, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push):
+    @patch("extract_photos.immich.purge_existing_assets", return_value=0)
+    def test_pushover_sent_with_all_args(self, mock_purge, mock_scan, mock_poll, mock_album, mock_add, mock_find, mock_share, mock_push):
         from extract_photos.immich import main
 
         mock_add.return_value = [
@@ -698,7 +757,8 @@ class TestMain:
     @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
     @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}])
     @patch("extract_photos.immich.trigger_scan")
-    def test_pushover_skipped_without_both_keys(self, mock_scan, mock_poll, mock_album, mock_add, mock_push, capsys):
+    @patch("extract_photos.immich.purge_existing_assets", return_value=0)
+    def test_pushover_skipped_without_both_keys(self, mock_purge, mock_scan, mock_poll, mock_album, mock_add, mock_push, capsys):
         from extract_photos.immich import main
 
         mock_add.return_value = [{"id": "a1", "success": True}]
@@ -728,7 +788,8 @@ class TestMain:
     @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
     @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}])
     @patch("extract_photos.immich.trigger_scan")
-    def test_pushover_without_photo_count(self, mock_scan, mock_poll, mock_album, mock_add, mock_push):
+    @patch("extract_photos.immich.purge_existing_assets", return_value=0)
+    def test_pushover_without_photo_count(self, mock_purge, mock_scan, mock_poll, mock_album, mock_add, mock_push):
         from extract_photos.immich import main
 
         mock_add.return_value = [{"id": "a1", "success": True}]
@@ -771,6 +832,7 @@ class TestMain:
         ]
         with (
             patch("sys.argv", ["immich.py"] + args),
+            patch("extract_photos.immich.purge_existing_assets", return_value=0),
             patch("extract_photos.immich.trigger_scan"),
             patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}, {"id": "a2"}]),
             patch("extract_photos.immich.find_or_create_album", return_value="album-1"),
@@ -785,6 +847,7 @@ class TestMain:
 
         output = capsys.readouterr().out
         assert "📚 Immich Integration" in output
+        assert "Purging stale assets..." in output
         assert "Scanning library..." in output
         assert "Waiting for assets..." in output
         assert "2 found" in output
@@ -795,3 +858,40 @@ class TestMain:
         assert "Creating album..." in output
         assert "Adding 2 asset(s)..." in output
         assert "Sharing with john..." in output
+
+    @patch("extract_photos.immich.add_assets_to_album")
+    @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
+    @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}])
+    @patch("extract_photos.immich.trigger_scan")
+    @patch("extract_photos.immich.purge_existing_assets")
+    def test_purge_failure_does_not_abort(self, mock_purge, mock_scan, mock_poll, mock_album, mock_add, capsys):
+        """Purge failure is non-fatal — main() continues to scan and import."""
+        import urllib.error
+
+        from extract_photos.immich import main
+
+        mock_purge.side_effect = urllib.error.URLError("connection refused")
+        mock_add.return_value = [{"id": "a1", "success": True}]
+
+        args = [
+            "--api-url", "http://immich",
+            "--api-key", "key",
+            "--library-id", "lib-1",
+            "--asset-path", "/photos/subdir",
+            "--video-filename", "Author-Title.mkv",
+        ]
+        with (
+            patch("sys.argv", ["immich.py"] + args),
+            patch("extract_photos.immich.get_video_date", return_value=datetime(2000, 1, 1, tzinfo=timezone.utc)),
+            patch("extract_photos.immich.update_asset_date"),
+            patch("extract_photos.immich.immich_request"),
+        ):
+            main()
+
+        output = capsys.readouterr().out
+        assert "Purging stale assets..." in output
+        assert "failed" in output
+        # Flow continued past the purge failure
+        mock_scan.assert_called_once()
+        mock_poll.assert_called_once()
+        mock_album.assert_called_once()

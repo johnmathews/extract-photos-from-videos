@@ -36,6 +36,23 @@ def trigger_scan(api_url: str, api_key: str, library_id: str) -> None:
     immich_request(url, api_key, method="POST")
 
 
+def purge_existing_assets(api_url: str, api_key: str, asset_path: str) -> int:
+    """Delete any existing assets (including trashed) at the given path.
+
+    When assets are deleted from Immich UI, stale records can block re-import.
+    This searches with withDeleted=True and force-deletes any matches.
+    Returns count of purged assets.
+    """
+    url = f"{api_url}/api/search/metadata"
+    result = immich_request(url, api_key, method="POST", data={"originalPath": asset_path, "withDeleted": True})
+    assets = result.get("assets", {}).get("items", []) if isinstance(result, dict) else []
+    if not assets:
+        return 0
+    ids = [a["id"] for a in assets]
+    immich_request(f"{api_url}/api/assets", api_key, method="DELETE", data={"ids": ids, "force": True})
+    return len(ids)
+
+
 def poll_for_assets(
     api_url: str,
     api_key: str,
@@ -65,7 +82,7 @@ def poll_for_assets(
         if len(assets) >= expected_count:
             return assets
         # If count stabilised across two polls, the scan is done
-        if assets and len(assets) == prev_count:
+        if len(assets) == prev_count:
             stable_polls += 1
             if stable_polls >= 4:
                 return assets
@@ -271,7 +288,17 @@ def main() -> None:
 
     print("\n📚 Immich Integration")
 
-    # 1. Trigger library scan
+    # 1. Purge stale assets that may block re-import
+    asset_search_path = args.asset_path.rstrip("/") + "/"
+    print("  Purging stale assets...   ", end="", flush=True)
+    try:
+        purged = purge_existing_assets(api_url, args.api_key, asset_search_path)
+        print(f"{purged} removed" if purged else "none found")
+    except (urllib.error.URLError, KeyError, TypeError) as e:
+        print("failed")
+        print(f"Warning: failed to purge stale assets: {e}", file=sys.stderr)
+
+    # 2. Trigger library scan
     print("  Scanning library...       ", end="", flush=True)
     try:
         trigger_scan(api_url, args.api_key, args.library_id)
@@ -281,8 +308,7 @@ def main() -> None:
         print(f"Error: failed to trigger library scan: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # 2. Poll for new assets
-    asset_search_path = args.asset_path.rstrip("/") + "/"
+    # 3. Poll for new assets
     expected = (args.photo_count + 1) if args.photo_count else 1
     print("  Waiting for assets...     ", end="", flush=True)
     assets = poll_for_assets(
@@ -302,13 +328,13 @@ def main() -> None:
             " (library scan may still be running)"
         )
 
-    # 3. Order assets: video first, photos by timestamp
+    # 4. Order assets: video first, photos by timestamp
     print("  Ordering assets...        ", end="", flush=True)
     ordered = order_assets(assets)
     asset_ids = [a["id"] for a in ordered]
     print("done")
 
-    # 4. Set dateTimeOriginal so Immich sorts by video timeline
+    # 5. Set dateTimeOriginal so Immich sorts by video timeline
     video_path = os.path.join(args.asset_path, args.video_filename)
     base_date = get_video_date(video_path)
     print(f"  Video date: {base_date.strftime('%Y-%m-%d')}")
@@ -330,7 +356,7 @@ def main() -> None:
         print("failed")
         print(f"Warning: failed to set asset dates: {e}", file=sys.stderr)
 
-    # 5. Create or find album, set sort order to oldest first
+    # 6. Create or find album, set sort order to oldest first
     print(f"  Album: {album_name}")
     print("  Creating album...         ", end="", flush=True)
     try:
@@ -348,7 +374,7 @@ def main() -> None:
         print(f"Error: failed to create/find album: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # 6. Add assets to album
+    # 7. Add assets to album
     print(f"  Adding {len(asset_ids)} asset(s)...     ", end="", flush=True)
     try:
         results = add_assets_to_album(api_url, args.api_key, album_id, asset_ids)
@@ -386,7 +412,7 @@ def main() -> None:
         print(f"Error: failed to add assets to album: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # 7. Share album if user specified
+    # 8. Share album if user specified
     if not args.share_user:
         print("  Sharing...                not configured (IMMICH_SHARE_USER not set)")
     else:
@@ -413,7 +439,7 @@ def main() -> None:
             print("failed")
             print(f"Error: failed to share album: {e}", file=sys.stderr)
 
-    # 8. Send Pushover notification if configured
+    # 9. Send Pushover notification if configured
     if args.pushover_user_key and args.pushover_app_token:
         print("  Sending notification...   ", end="", flush=True)
         try:

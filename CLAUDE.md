@@ -92,12 +92,14 @@ Key modules in `extract_photos/`:
 - **utils.py** - Photo validation, safe folder names, logging.
 - **display_progress.py** - `format_time()`, `build_progress_bar()`, and `print_scan_progress()` for 3-line in-place
   terminal progress.
-- **immich.py** - Standalone Immich integration script called by `bin/epm` after extraction. Triggers a library scan,
-  polls for new assets, orders them (video first, photos sorted by timestamp), sets `dateTimeOriginal` on each asset
-  (video gets its YouTube upload date via ffprobe or file mtime as fallback; photos get that base date plus their video
-  offset), creates/reuses an album named after the video, adds assets in order, optionally shares the album, and
-  optionally sends a Pushover notification. Uses stdlib (`urllib.request`, `urllib.parse`, `json`, `subprocess`, `os`,
-  `datetime`) plus ffprobe for metadata. Can be run directly:
+- **immich.py** - Standalone Immich integration script called by `bin/epm` after extraction. First purges any existing
+  assets (including trashed) at the target path via `purge_existing_assets()` to prevent stale records from blocking
+  re-import. Then triggers a library scan, polls for new assets (with early exit when poll count stabilises at zero),
+  orders them (video first, photos sorted by timestamp), sets `dateTimeOriginal` on each asset (video gets its YouTube
+  upload date via ffprobe or file mtime as fallback; photos get that base date plus their video offset), creates/reuses
+  an album named after the video, adds assets in order, optionally shares the album, and optionally sends a Pushover
+  notification. Uses stdlib (`urllib.request`, `urllib.parse`, `json`, `subprocess`, `os`, `datetime`) plus ffprobe for
+  metadata. Can be run directly:
   `python extract_photos/immich.py --api-url ... --api-key ... --library-id ... --asset-path ... --video-filename ...`.
 
 **test-video/** - Contains a test video and ground-truth timestamp files: `photo-timestamps.txt` (standard single photos)
