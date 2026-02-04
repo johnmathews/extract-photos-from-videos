@@ -203,6 +203,31 @@ class TestIsScreenshot:
         img = rng.randint(20, 200, (200, 200, 3), dtype=np.uint8)
         assert _is_screenshot(img) is None
 
+    def test_bw_photo_not_rejected(self):
+        """A B&W photo stored as 3-channel BGR should not be rejected as screenshot."""
+        rng = np.random.RandomState(42)
+        gray = rng.randint(0, 256, (200, 200), dtype=np.uint8)
+        img = np.stack([gray, gray, gray], axis=2)
+        assert _is_screenshot(img) is None
+
+    def test_bw_photo_with_codec_noise_not_rejected(self):
+        """A B&W photo with small per-channel noise (from video codec) should not be rejected."""
+        rng = np.random.RandomState(42)
+        gray = rng.randint(20, 220, (200, 200), dtype=np.uint8)
+        img = np.stack([gray, gray, gray], axis=2)
+        noise = rng.randint(-3, 4, (200, 200, 3), dtype=np.int16)
+        img = np.clip(img.astype(np.int16) + noise, 0, 255).astype(np.uint8)
+        assert _is_screenshot(img) is None
+
+    def test_color_screenshot_still_rejected(self):
+        """A color screenshot with flat blocks should still be rejected after the B&W fix."""
+        img = np.zeros((200, 200, 3), dtype=np.uint8)
+        img[0:100, 0:100] = [255, 0, 0]
+        img[0:100, 100:200] = [0, 255, 0]
+        img[100:200, 0:100] = [0, 0, 255]
+        img[100:200, 100:200] = [255, 255, 0]
+        assert _is_screenshot(img) is not None
+
 
 class TestRejectionReason:
     def test_too_small(self):

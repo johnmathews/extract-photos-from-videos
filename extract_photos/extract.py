@@ -103,6 +103,17 @@ def _is_screenshot(image: np.ndarray, color_count_threshold: int = 100, sample_s
     if len(image.shape) < 3 or image.shape[2] < 3:
         return None
     small = cv2.resize(image, (sample_size, sample_size), interpolation=cv2.INTER_AREA)
+    # Skip effectively-grayscale 3-channel images (e.g. B&W photos from video).
+    # Same rationale as the single-channel skip above: can't reliably distinguish
+    # a B&W photo from a B&W screenshot using color diversity alone.
+    channels = small.astype(np.int16)
+    mean_channel_diff = (
+        np.abs(channels[:, :, 0] - channels[:, :, 1]).mean()
+        + np.abs(channels[:, :, 0] - channels[:, :, 2]).mean()
+        + np.abs(channels[:, :, 1] - channels[:, :, 2]).mean()
+    ) / 3
+    if mean_channel_diff < 10.0:
+        return None
     quantized = small // 8  # 256 / 8 = 32 levels per channel
     # Pack RGB into a single int per pixel for fast unique counting
     r = quantized[:, :, 0].astype(np.uint32)
