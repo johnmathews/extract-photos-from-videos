@@ -538,7 +538,7 @@ def get_video_metadata(video_file: str) -> tuple[int, float, int, int]:
 
 
 def extract_fullres_frames(
-    video_file: str, output_folder: str, photo_timestamps: list[tuple[float, str]], filename: str, logger: logging.Logger, border_px: int = 5, min_photo_area: int = 0, include_text: bool = True
+    video_file: str, output_folder: str, photo_timestamps: list[tuple[float, str]], filename: str, logger: logging.Logger, border_px: int = 5, min_photo_area: int = 0, include_text: bool = False
 ) -> int:
     """Extract full-resolution frames at the given timestamps from the original video.
 
@@ -696,7 +696,7 @@ def transcode_for_playback(video_file: str, output_dir: str) -> str:
 
 
 def extract_photos_from_video(
-    video_file: str, output_folder: str, step_time: float, filename: str, border_px: int = 5, min_photo_pct: int = 25, include_text: bool = True
+    video_file: str, output_folder: str, step_time: float, filename: str, border_px: int = 5, min_photo_pct: int = 25, include_text: bool = False
 ) -> None:
     """Extract photos from a video using a three-phase pipeline:
     1. Transcode to low-res temp file

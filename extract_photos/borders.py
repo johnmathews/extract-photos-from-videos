@@ -79,7 +79,7 @@ def _detect_text_padding(cropped_gray: np.ndarray, border_gray_value: int, borde
     return padding, crop
 
 
-def trim_and_add_border(image: np.ndarray, border_px: int = 5, uniformity_threshold: int = 10, include_text: bool = True) -> np.ndarray:
+def trim_and_add_border(image: np.ndarray, border_px: int = 5, uniformity_threshold: int = 10, include_text: bool = False) -> np.ndarray:
     """
     Trims uniform borders from an image using edge-scanning, then adds a
     fixed-size border in the original border color.

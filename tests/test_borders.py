@@ -133,7 +133,7 @@ class TestTextPadding:
             content_h=200, content_w=300, border_size=80, border_color=(0, 0, 0),
             text_side="right", text_width=30, gap_width=20,
         )
-        result = trim_and_add_border(img, border_px=5)
+        result = trim_and_add_border(img, border_px=5, include_text=True)
         # Right side should have extra padding (gap_width=20 > border_px=5)
         # Content is 300px wide; result width should be > 300 + 2*5
         assert result.shape[1] > 300 + 2 * 5
@@ -147,7 +147,7 @@ class TestTextPadding:
             content_h=200, content_w=300, border_size=80, border_color=(0, 0, 0),
             text_side="left", text_width=30, gap_width=20,
         )
-        result = trim_and_add_border(img, border_px=5)
+        result = trim_and_add_border(img, border_px=5, include_text=True)
         # Left side should have extra padding
         assert result.shape[1] > 300 + 2 * 5
         assert result.shape[0] == 200 + 2 * 5

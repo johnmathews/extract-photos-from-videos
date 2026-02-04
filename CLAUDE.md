@@ -85,8 +85,8 @@ Key modules in `extract_photos/`:
 - **borders.py** - `trim_and_add_border()`: scans inward from each edge to find content boundaries using per-row/column
   std deviation, crops original borders, detects text/watermarks near edges via `_detect_text_padding()` (looks for
   sparse-content → zero-density-gap → dense-content pattern in column/row density profiles). Behavior depends on
-  `include_text`: when `True` (default), adds extra padding on edges with text (matching the gap width), default 5px on
-  clean edges; when `False`, crops the text region out entirely and adds uniform `border_px` padding on all sides.
+  `include_text`: when `False` (default), crops the text region out entirely and adds uniform `border_px` padding on all
+  sides; when `True`, adds extra padding on edges with text (matching the gap width), default 5px on clean edges.
 - **utils.py** - Photo validation, safe folder names, logging.
 - **display_progress.py** - `format_time()`, `build_progress_bar()`, and `print_scan_progress()` for 3-line in-place
   terminal progress.

@@ -43,8 +43,8 @@ def main() -> None:
     parser.add_argument(
         "--include-text",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Include text/annotations next to photos (default: yes). Use --no-include-text to crop them out.",
+        default=False,
+        help="Include text/annotations next to photos (default: no). Use --include-text to keep them.",
     )
 
     args = parser.parse_args()

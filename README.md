@@ -51,8 +51,7 @@ real photo has std > 15. Checked during both scanning (Phase 2) and full-res ext
    - The bordered content covers at least 25% of the video frame area (tunable via `--min-photo-pct`).
    - It is not a screenshot (has enough color diversity to be a real photo).
 4. Borders are trimmed and replaced with a clean border matching the original color. If text/annotations are
-   detected next to the photo, they are included by default (`--include-text`); use `--no-include-text` to crop
-   them out.
+   detected next to the photo, they are cropped out by default; use `--include-text` to keep them.
 5. Output is organized into per-video subdirectories.
 
 Supported video formats: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`.
@@ -90,7 +89,7 @@ uv run python -m extract_photos.main INPUT_DIR [options]
 | `-s, --step_time`           | `0.5`              | Seconds between sampled frames                       |
 | `-b, --border_px`           | `5`                | Border size in pixels to add around extracted photos |
 | `--min-photo-pct`           | `25`               | Minimum photo area as % of video frame area          |
-| `--include-text` / `--no-include-text` | `yes`   | Include text/annotations next to photos; use `--no-include-text` to crop them out |
+| `--include-text` / `--no-include-text` | `no`    | Include text/annotations next to photos; use `--include-text` to keep them |
 
 ### Examples
 
@@ -203,7 +202,7 @@ epm input_file=VIDEO [output_dir=DIR] [options]
 | `step_time=SECONDS` | `0.5`   | Seconds between sampled frames                           |
 | `border_px=INT`     | `5`     | Border size in pixels to add around extracted photos     |
 | `min_photo_pct=INT` | `25`    | Minimum photo area as % of video frame area              |
-| `include_text=BOOL` | `true`  | Include text/annotations next to photos                  |
+| `include_text=BOOL` | `false` | Include text/annotations next to photos                  |
 | `update_immich=BOOL`| `true`  | Run Immich integration (rescan, album creation, sharing) |
 | `help`              |         | Show usage                                               |
 
