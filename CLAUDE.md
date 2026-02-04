@@ -15,13 +15,13 @@ frames at discovered timestamps. Deduplicates using perceptual hashing and saves
 uv run python -m extract_photos.main "/path/to/video/directory"
 
 # Run with options
-uv run python -m extract_photos.main "/path/to/videos" -s 1.0 -b 10 --min-photo-pct 25
+uv run python -m extract_photos.main "/path/to/videos" -s 1.0 -b 10 --min-photo-pct 25 --no-include-text
 
-# Run on remote host (single video, default: media_vm)
+# Run on remote host (single video, default: immich_lxc)
 epm input_file=/data/videos/sunset.mp4 output_dir=/data/photos
 
 # Run on a different remote host
-epm input_file=/data/videos/sunset.mp4 host=immich_lxc
+epm input_file=/data/videos/sunset.mp4 host=media_vm
 
 # Run type checking
 uv run pyright
@@ -105,7 +105,7 @@ and `edge-cases.txt` (side-by-side photos and similar sequential photos). Used b
 `tests/test_video_integration.py`.
 
 **bin/epm** - Bash wrapper that SSHes into a remote host to run the tool on a single video. Accepts `host=NAME` to select
-the target: `media_vm` (default, SSH host `media`) or `immich_lxc` (SSH host `immich`). Auto-installs repo/deps on first
+the target: `immich_lxc` (default, SSH host `immich`) or `media_vm` (SSH host `media`). Auto-installs repo/deps on first
 run and auto-updates (`git pull` + `uv sync`) on subsequent runs. Arguments with special shell characters (e.g. `[]` in
 filenames) must be quoted. Computes the sanitized output subdirectory name early (via `make_safe_folder_name`) and prompts
 skip-or-overwrite if it already contains extracted photos. Creates a temp dir with a symlink to bridge single-file input

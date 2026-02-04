@@ -50,7 +50,9 @@ real photo has std > 15. Checked during both scanning (Phase 2) and full-res ext
    - It is sufficiently different from the previous extracted photo (perceptual hash deduplication).
    - The bordered content covers at least 25% of the video frame area (tunable via `--min-photo-pct`).
    - It is not a screenshot (has enough color diversity to be a real photo).
-4. Borders are trimmed and replaced with a clean border matching the original color.
+4. Borders are trimmed and replaced with a clean border matching the original color. If text/annotations are
+   detected next to the photo, they are included by default (`--include-text`); use `--no-include-text` to crop
+   them out.
 5. Output is organized into per-video subdirectories.
 
 Supported video formats: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`.
@@ -170,7 +172,7 @@ propagate correctly). Temporary working files are cleaned up automatically on ex
 
 ### Prerequisites
 
-`ssh media` must be configured and working (via `~/.ssh/config` or equivalent).
+`ssh immich` (default) or `ssh media` must be configured and working (via `~/.ssh/config` or equivalent).
 
 ### Installation
 
@@ -219,7 +221,7 @@ epm "/data/videos/video-[abc123].mkv" output_dir=/data/photos
 ### Immich integration
 
 After extracting photos, `epm` can automatically create an [Immich](https://immich.app/) album containing the new photos.
-Set these environment variables on the media VM (e.g. in `~/.bashrc`):
+Set these environment variables on the remote host (e.g. in `~/.bashrc`):
 
 | Variable             | Required | Description                                       |
 | -------------------- | -------- | ------------------------------------------------- |

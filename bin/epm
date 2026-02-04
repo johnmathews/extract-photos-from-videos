@@ -20,7 +20,7 @@ Arguments:
                      (default: /mnt/nfs/photos/reference)
 
 Options:
-  host=NAME                Remote host to run on: media_vm (default) or immich_lxc
+  host=NAME                Remote host to run on: immich_lxc (default) or media_vm
   step_time=SECONDS        Time between sampled frames (default: 0.5)
   border_px=INT            Border size in pixels around extracted photos (default: 5)
   min_photo_pct=INT        Minimum photo area as % of video frame area (default: 25)

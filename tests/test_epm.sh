@@ -95,7 +95,20 @@ check "reordered args no 'unknown argument'" $failed
 echo "$output" | grep -q "input_file is required" && failed=1 || failed=0
 check "reordered args no 'required'" $failed
 
-# 13. Default output_dir -- help text mentions /mnt/nfs/photos/reference
+# 13. include_text option -- parsing succeeds
+output=$("$EPM" input_file=/foo include_text=false 2>&1)
+rc=$?
+[[ $rc -ne 0 ]]; check "include_text=false exits non-zero (ssh unreachable)" $?
+echo "$output" | grep -q "unknown argument" && failed=1 || failed=0
+check "include_text=false no 'unknown argument'" $failed
+
+output=$("$EPM" input_file=/foo include_text=true 2>&1)
+rc=$?
+[[ $rc -ne 0 ]]; check "include_text=true exits non-zero (ssh unreachable)" $?
+echo "$output" | grep -q "unknown argument" && failed=1 || failed=0
+check "include_text=true no 'unknown argument'" $failed
+
+# 14. Default output_dir -- help text mentions /mnt/nfs/photos/reference
 output=$("$EPM" help 2>&1)
 echo "$output" | grep -q "/mnt/nfs/photos/reference"
 check "default output_dir in help" $?

@@ -171,6 +171,48 @@ class TestTextPadding:
         assert result.shape[1] <= 300 + 30 + 2 * 5 + 10  # reasonable upper bound
 
 
+class TestExcludeText:
+    def test_exclude_text_crops_text_region(self):
+        """With include_text=False, text region should be cropped out, resulting in a smaller image."""
+        img = _make_bordered_image_with_text(
+            content_h=200, content_w=300, border_size=80, border_color=(0, 0, 0),
+            text_side="right", text_width=30, gap_width=20,
+        )
+        result_include = trim_and_add_border(img, border_px=5, include_text=True)
+        result_exclude = trim_and_add_border(img, border_px=5, include_text=False)
+        # Excluding text should produce a narrower image (text region cropped from right)
+        assert result_exclude.shape[1] < result_include.shape[1]
+
+    def test_exclude_text_uniform_border(self):
+        """With include_text=False, all sides should get uniform border_px padding."""
+        img = _make_bordered_image_with_text(
+            content_h=200, content_w=300, border_size=80, border_color=(0, 0, 0),
+            text_side="right", text_width=30, gap_width=20,
+        )
+        result = trim_and_add_border(img, border_px=10, include_text=False)
+        # Height should be content (minus any top/bottom crop) + 2*10
+        # The key check: height should have uniform 10px borders (no extra padding)
+        assert result.shape[0] == 200 + 2 * 10
+
+    def test_exclude_text_no_text_same_as_include(self):
+        """Without text, include_text=False should produce the same result as True."""
+        img = _make_bordered_image(200, 300, border_size=80, border_color=(0, 0, 0))
+        result_include = trim_and_add_border(img, border_px=5, include_text=True)
+        result_exclude = trim_and_add_border(img, border_px=5, include_text=False)
+        assert result_include.shape == result_exclude.shape
+        assert np.array_equal(result_include, result_exclude)
+
+    def test_exclude_text_left_side(self):
+        """Text on left should be cropped when include_text=False."""
+        img = _make_bordered_image_with_text(
+            content_h=200, content_w=300, border_size=80, border_color=(0, 0, 0),
+            text_side="left", text_width=30, gap_width=20,
+        )
+        result_include = trim_and_add_border(img, border_px=5, include_text=True)
+        result_exclude = trim_and_add_border(img, border_px=5, include_text=False)
+        assert result_exclude.shape[1] < result_include.shape[1]
+
+
 class TestFindTextGapFromEdge:
     def test_clear_text_gap_pattern(self):
         # text (sparse) -> gap (zeros) -> dense content
