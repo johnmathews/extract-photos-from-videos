@@ -62,12 +62,6 @@ def _is_vaapi_available() -> bool:
 
 def _lowres_encode_args() -> list[str]:
     """Return ffmpeg encode arguments for low-res transcoding."""
-    if _is_vaapi_available():
-        return [
-            "-vaapi_device", VAAPI_DEVICE,
-            "-vf", "format=nv12,hwupload,scale_vaapi=w=320:h=-2",
-            "-c:v", "h264_vaapi", "-qp", "25", "-an",
-        ]
     return ["-vf", "scale=320:-2", "-an", "-q:v", "5"]
 
 

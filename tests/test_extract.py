@@ -329,14 +329,14 @@ class TestVaapiArgs:
         assert "scale=320:-2" in args
         assert "-an" in args
 
-    def test_lowres_vaapi(self):
+    def test_lowres_always_software(self):
+        """Low-res transcode always uses software encoding, even when VAAPI is available."""
         extract_mod._vaapi_available = True
         args = _lowres_encode_args()
-        assert "-vaapi_device" in args
-        assert VAAPI_DEVICE in args
-        assert "h264_vaapi" in args
-        assert any("scale_vaapi" in a for a in args)
+        assert "-vf" in args
+        assert "scale=320:-2" in args
         assert "-an" in args
+        assert "-vaapi_device" not in args
 
     def test_playback_software(self):
         extract_mod._vaapi_available = False

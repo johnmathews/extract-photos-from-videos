@@ -52,8 +52,8 @@ transcode, scan, extract)
 
 Each video goes through three phases:
 
-1. **Transcode** — ffmpeg creates a 320px-wide low-res temp copy (no audio). Uses VAAPI hardware acceleration when
-   available (see below).
+1. **Transcode** — ffmpeg creates a 320px-wide low-res temp copy (no audio). Always uses software encoding (VAAPI
+   overhead exceeds savings at 320px).
 2. **Scan** — Single-threaded scan of the low-res copy. Steps through frames at `step_time` intervals, detects uniform
    borders, rejects near-uniform frames (black/white screens), deduplicates via perceptual hashing. Uses both
    step-to-step comparison (threshold 3, detects back-to-back photo transitions) and first-detection comparison
@@ -70,8 +70,9 @@ Key modules in `extract_photos/`:
   subdirectories, calls extractor for each. Prompts skip-or-overwrite when a video's output directory already contains
   extracted photos (detected by presence of both `.jpg` and video files).
 - **extract.py** - Core logic. `_is_vaapi_available()` detects VAAPI hardware acceleration at runtime (checks for
-  `/dev/dri/renderD128` then runs a minimal ffmpeg probe; cached per process). `_lowres_encode_args()` and
-  `_playback_encode_args()` return the appropriate ffmpeg arguments for software or VAAPI encoding.
+  `/dev/dri/renderD128` then runs a minimal ffmpeg probe; cached per process). `_lowres_encode_args()` always returns
+  software encoding arguments (VAAPI `hwupload` overhead exceeds savings at 320px on shared-memory iGPUs).
+  `_playback_encode_args()` returns VAAPI or software arguments depending on availability.
   `transcode_lowres()` creates the low-res temp file via ffmpeg. `scan_for_photos()` scans it single-threaded with
   progress display, rejecting near-uniform frames (black/white screens) before hashing.
   `extract_fullres_frames()` seeks to each timestamp in the original video. `_rejection_reason()` validates extracted
@@ -116,12 +117,16 @@ video name + timestamp. Each video subdirectory also has a `logs/` folder with a
 
 ## Hardware acceleration
 
-Both `transcode_lowres()` and `transcode_for_playback()` automatically use VAAPI hardware encoding when a compatible GPU
-is available (e.g. Ryzen 5 Pro 4650G Vega iGPU on the Immich LXC). Detection is zero-config: checks for
-`/dev/dri/renderD128`, verifies with a minimal ffmpeg probe, and caches the result per process. On hosts without a GPU
-(e.g. media VM), the existing software pipeline (`libx264` / mjpeg) runs unchanged. The approach is software decode +
-hwupload + VAAPI scale/encode (`h264_vaapi` + `scale_vaapi`), which works regardless of input codec (important for
-YouTube AV1 videos that can't be HW-decoded on Vega).
+`transcode_for_playback()` automatically uses VAAPI hardware encoding when a compatible GPU is available (e.g. Ryzen 5
+Pro 4650G Vega iGPU on the Immich LXC). Detection is zero-config: checks for `/dev/dri/renderD128`, verifies with a
+minimal ffmpeg probe, and caches the result per process. On hosts without a GPU (e.g. media VM), the existing software
+pipeline (`libx264`) runs unchanged. The approach is software decode + hwupload + VAAPI scale/encode (`h264_vaapi` +
+`scale_vaapi`), which works regardless of input codec (important for YouTube AV1 videos that can't be HW-decoded on
+Vega).
+
+`transcode_lowres()` always uses software encoding. At 320px output, H.264 encoding is trivially cheap on CPU — the
+VAAPI overhead (format conversion, `hwupload` memory transfer, GPU encode, sync) adds latency that exceeds the encoding
+time saved, especially on shared-memory iGPUs where `hwupload` competes for memory bandwidth with CPU decode.
 
 ## Dependencies
 
