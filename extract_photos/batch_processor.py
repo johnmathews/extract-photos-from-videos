@@ -30,6 +30,7 @@ def process_videos_in_directory(
     step_time: float,
     border_px: int = 5,
     min_photo_pct: int = 25,
+    include_text: bool = True,
 ) -> None:
     """
     Processes all videos in the specified directory. For each video, it creates a subdirectory
@@ -88,6 +89,7 @@ def process_videos_in_directory(
             filename=filename,
             border_px=border_px,
             min_photo_pct=min_photo_pct,
+            include_text=include_text,
         )
 
     print(

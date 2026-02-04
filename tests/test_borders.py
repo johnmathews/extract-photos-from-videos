@@ -175,20 +175,23 @@ class TestFindTextGapFromEdge:
     def test_clear_text_gap_pattern(self):
         # text (sparse) -> gap (zeros) -> dense content
         density = np.array([0.02, 0.03, 0.01, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5, 0.8, 0.9])
-        result = _find_text_gap_from_edge(density, content_fraction=0.3, min_gap_px=10)
-        assert result == 10  # gap from index 3 to 13
+        gap_width, dense_start = _find_text_gap_from_edge(density, content_fraction=0.3, min_gap_px=10)
+        assert gap_width == 10  # gap from index 3 to 13
+        assert dense_start == 13  # photo content starts at index 13
 
     def test_no_text_returns_zero(self):
         # All dense — no text-gap pattern
         density = np.array([0.5, 0.6, 0.7, 0.8, 0.9])
-        result = _find_text_gap_from_edge(density, content_fraction=0.3, min_gap_px=10)
-        assert result == 0
+        gap_width, dense_start = _find_text_gap_from_edge(density, content_fraction=0.3, min_gap_px=10)
+        assert gap_width == 0
+        assert dense_start == 0
 
     def test_gap_too_small(self):
         # text -> small gap -> dense content
         density = np.array([0.02, 0.03, 0.0, 0.0, 0.0, 0.5, 0.8])
-        result = _find_text_gap_from_edge(density, content_fraction=0.3, min_gap_px=10)
-        assert result == 0
+        gap_width, dense_start = _find_text_gap_from_edge(density, content_fraction=0.3, min_gap_px=10)
+        assert gap_width == 0
+        assert dense_start == 0
 
     def test_empty_density(self):
-        assert _find_text_gap_from_edge(np.array([]), content_fraction=0.3, min_gap_px=10) == 0
+        assert _find_text_gap_from_edge(np.array([]), content_fraction=0.3, min_gap_px=10) == (0, 0)

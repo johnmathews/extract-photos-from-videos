@@ -538,7 +538,7 @@ def get_video_metadata(video_file: str) -> tuple[int, float, int, int]:
 
 
 def extract_fullres_frames(
-    video_file: str, output_folder: str, photo_timestamps: list[tuple[float, str]], filename: str, logger: logging.Logger, border_px: int = 5, min_photo_area: int = 0
+    video_file: str, output_folder: str, photo_timestamps: list[tuple[float, str]], filename: str, logger: logging.Logger, border_px: int = 5, min_photo_area: int = 0, include_text: bool = True
 ) -> int:
     """Extract full-resolution frames at the given timestamps from the original video.
 
@@ -586,7 +586,7 @@ def extract_fullres_frames(
                 )
                 continue
 
-            trimmed_frame = trim_and_add_border(frame, border_px=border_px)
+            trimmed_frame = trim_and_add_border(frame, border_px=border_px, include_text=include_text)
             reason = _rejection_reason(trimmed_frame, min_photo_area=min_photo_area)
             if reason is None:
                 file_name = f"{filename_safe}_{time_str}.jpg"
@@ -696,7 +696,7 @@ def transcode_for_playback(video_file: str, output_dir: str) -> str:
 
 
 def extract_photos_from_video(
-    video_file: str, output_folder: str, step_time: float, filename: str, border_px: int = 5, min_photo_pct: int = 25
+    video_file: str, output_folder: str, step_time: float, filename: str, border_px: int = 5, min_photo_pct: int = 25, include_text: bool = True
 ) -> None:
     """Extract photos from a video using a three-phase pipeline:
     1. Transcode to low-res temp file
@@ -756,6 +756,7 @@ def extract_photos_from_video(
                 logger,
                 border_px=border_px,
                 min_photo_area=min_photo_area,
+                include_text=include_text,
             )
             extract_elapsed = format_time(time.monotonic() - extract_start)
         else:

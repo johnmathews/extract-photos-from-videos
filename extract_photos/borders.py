@@ -4,16 +4,18 @@ import cv2
 import numpy as np
 
 
-def _find_text_gap_from_edge(density: np.ndarray, content_fraction: float = 0.3, min_gap_px: int = 10) -> int:
+def _find_text_gap_from_edge(density: np.ndarray, content_fraction: float = 0.3, min_gap_px: int = 10) -> tuple[int, int]:
     """
     Given a 1D density profile (from one edge inward), detect a text-gap-photo pattern.
 
     Looks for: sparse content (text) -> gap (zero density) -> dense content (photo).
-    Returns the gap width if found, otherwise 0.
+    Returns (gap_width, dense_start) if found, otherwise (0, 0).
+    - gap_width: width of the gap between text and photo (used as padding when including text)
+    - dense_start: distance from edge to where photo content begins (used as crop when excluding text)
     """
     n = len(density)
     if n == 0:
-        return 0
+        return 0, 0
 
     # Find where dense content (photo) starts
     dense_start = None
@@ -23,7 +25,7 @@ def _find_text_gap_from_edge(density: np.ndarray, content_fraction: float = 0.3,
             break
 
     if dense_start is None or dense_start < min_gap_px:
-        return 0
+        return 0, 0
 
     # Walk backward from dense_start to find the gap (zero-density region)
     gap_end = dense_start
@@ -34,46 +36,50 @@ def _find_text_gap_from_edge(density: np.ndarray, content_fraction: float = 0.3,
             break
     else:
         # All zero from edge to dense_start — no text before the gap
-        return 0
+        return 0, 0
 
     if gap_start is None:
-        return 0
+        return 0, 0
 
     gap_width = gap_end - gap_start
     if gap_width < min_gap_px:
-        return 0
+        return 0, 0
 
     # Verify there's sparse content (text) before the gap
     has_text = any(0 < density[i] < content_fraction for i in range(gap_start))
     if not has_text:
-        return 0
+        return 0, 0
 
-    return gap_width
+    return gap_width, dense_start
 
 
-def _detect_text_padding(cropped_gray: np.ndarray, border_gray_value: int, border_diff_threshold: int = 30, content_fraction: float = 0.3, min_gap_px: int = 10) -> tuple[int, int, int, int]:
+def _detect_text_padding(cropped_gray: np.ndarray, border_gray_value: int, border_diff_threshold: int = 30, content_fraction: float = 0.3, min_gap_px: int = 10) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]]:
     """
-    Detect text/watermark near edges and return extra padding needed per side.
+    Detect text/watermark near edges and return padding and crop values per side.
 
     Computes a binary content mask (pixels differing from border color), then
     checks column/row density profiles from each edge for a text-gap-photo pattern.
 
-    Returns (extra_top, extra_bottom, extra_left, extra_right) padding values.
+    Returns two 4-tuples:
+    - padding: (top, bottom, left, right) gap widths for including text (border widening)
+    - crop: (top, bottom, left, right) dense_start distances for excluding text (cropping)
     """
     mask = (np.abs(cropped_gray.astype(np.int16) - int(border_gray_value)) > border_diff_threshold).astype(np.float32)
 
     col_density = np.mean(mask, axis=0)  # density per column (left-to-right)
     row_density = np.mean(mask, axis=1)  # density per row (top-to-bottom)
 
-    extra_left = _find_text_gap_from_edge(col_density, content_fraction, min_gap_px)
-    extra_right = _find_text_gap_from_edge(col_density[::-1], content_fraction, min_gap_px)
-    extra_top = _find_text_gap_from_edge(row_density, content_fraction, min_gap_px)
-    extra_bottom = _find_text_gap_from_edge(row_density[::-1], content_fraction, min_gap_px)
+    left_gap, left_dense = _find_text_gap_from_edge(col_density, content_fraction, min_gap_px)
+    right_gap, right_dense = _find_text_gap_from_edge(col_density[::-1], content_fraction, min_gap_px)
+    top_gap, top_dense = _find_text_gap_from_edge(row_density, content_fraction, min_gap_px)
+    bottom_gap, bottom_dense = _find_text_gap_from_edge(row_density[::-1], content_fraction, min_gap_px)
 
-    return extra_top, extra_bottom, extra_left, extra_right
+    padding = (top_gap, bottom_gap, left_gap, right_gap)
+    crop = (top_dense, bottom_dense, left_dense, right_dense)
+    return padding, crop
 
 
-def trim_and_add_border(image: np.ndarray, border_px: int = 5, uniformity_threshold: int = 10) -> np.ndarray:
+def trim_and_add_border(image: np.ndarray, border_px: int = 5, uniformity_threshold: int = 10, include_text: bool = True) -> np.ndarray:
     """
     Trims uniform borders from an image using edge-scanning, then adds a
     fixed-size border in the original border color.
@@ -134,12 +140,23 @@ def trim_and_add_border(image: np.ndarray, border_px: int = 5, uniformity_thresh
     # Detect text/watermarks near edges and compute extra padding
     cropped_gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY) if len(cropped.shape) == 3 else cropped
     border_gray_value = int(np.mean(cv2.cvtColor(border_sample, cv2.COLOR_BGR2GRAY) if len(border_sample.shape) == 3 else border_sample))  # type: ignore[reportArgumentType]
-    extra_top, extra_bottom, extra_left, extra_right = _detect_text_padding(cropped_gray, border_gray_value)
+    padding, crop_amounts = _detect_text_padding(cropped_gray, border_gray_value)
 
-    pad_top = max(border_px, extra_top)
-    pad_bottom = max(border_px, extra_bottom)
-    pad_left = max(border_px, extra_left)
-    pad_right = max(border_px, extra_right)
+    if include_text:
+        pad_top = max(border_px, padding[0])
+        pad_bottom = max(border_px, padding[1])
+        pad_left = max(border_px, padding[2])
+        pad_right = max(border_px, padding[3])
+    else:
+        # Crop out text regions before adding border
+        ct, cb, cl, cr = crop_amounts
+        ch, cw = cropped.shape[:2]
+        if ch - ct - cb > 0 and cw - cl - cr > 0:
+            cropped = cropped[ct : ch - cb, cl : cw - cr]
+        pad_top = border_px
+        pad_bottom = border_px
+        pad_left = border_px
+        pad_right = border_px
 
     # Add new border
     if len(image.shape) == 2:

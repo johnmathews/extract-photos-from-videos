@@ -40,6 +40,12 @@ def main() -> None:
         default=25,
         help="Minimum photo area as %% of video frame area (default: 25). Photos smaller than this are rejected.",
     )
+    parser.add_argument(
+        "--include-text",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Include text/annotations next to photos (default: yes). Use --no-include-text to crop them out.",
+    )
 
     args = parser.parse_args()
 
@@ -55,6 +61,7 @@ def main() -> None:
 
     print(f"step_time: {args.step_time}s")
     print(f"border_px: {args.border_px}")
+    print(f"include_text: {args.include_text}")
 
     print()
 
@@ -65,6 +72,7 @@ def main() -> None:
         step_time=args.step_time,
         border_px=args.border_px,
         min_photo_pct=args.min_photo_pct,
+        include_text=args.include_text,
     )
 
 

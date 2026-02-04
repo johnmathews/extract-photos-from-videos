@@ -64,8 +64,8 @@ Each video goes through three phases:
 
 Key modules in `extract_photos/`:
 
-- **main.py** - Entry point. Parses args (`input_directory`, `-o`, `-s`, `-b`, `--min-photo-pct`), creates output dir,
-  calls batch processor.
+- **main.py** - Entry point. Parses args (`input_directory`, `-o`, `-s`, `-b`, `--min-photo-pct`,
+  `--include-text`/`--no-include-text`), creates output dir, calls batch processor.
 - **batch_processor.py** - Scans directory for video files (.mp4/.mkv/.avi/.mov/.webm), creates per-video output
   subdirectories, calls extractor for each. Prompts skip-or-overwrite when a video's output directory already contains
   extracted photos (detected by presence of both `.jpg` and video files).
@@ -87,8 +87,9 @@ Key modules in `extract_photos/`:
   video with progress display.
 - **borders.py** - `trim_and_add_border()`: scans inward from each edge to find content boundaries using per-row/column
   std deviation, crops original borders, detects text/watermarks near edges via `_detect_text_padding()` (looks for
-  sparse-content → zero-density-gap → dense-content pattern in column/row density profiles), and adds per-side border —
-  extra padding on edges with text (matching the gap width), default 5px on clean edges.
+  sparse-content → zero-density-gap → dense-content pattern in column/row density profiles). Behavior depends on
+  `include_text`: when `True` (default), adds extra padding on edges with text (matching the gap width), default 5px on
+  clean edges; when `False`, crops the text region out entirely and adds uniform `border_px` padding on all sides.
 - **utils.py** - Photo validation, safe folder names, logging.
 - **display_progress.py** - `format_time()`, `build_progress_bar()`, and `print_scan_progress()` for 3-line in-place
   terminal progress.
