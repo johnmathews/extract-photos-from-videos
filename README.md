@@ -45,7 +45,7 @@ real photo has std > 15. Checked during both scanning (Phase 2) and full-res ext
    - **Extract** — Only the frames identified as photos are decoded from the original full-resolution video, trimmed,
      validated, and saved.
 3. A frame is extracted as a photo when:
-   - It has uniform-color borders on all four sides.
+   - It has uniform-color borders (all four sides, or pillarbox/letterbox with black side/top-bottom borders).
    - It is not near-uniform (solid black/white or near-solid with codec noise).
    - It is sufficiently different from the previous extracted photo (perceptual hash deduplication).
    - The bordered content covers at least 25% of the video frame area (tunable via `--min-photo-pct`).
