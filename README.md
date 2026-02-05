@@ -252,3 +252,23 @@ will:
 
 If any required variables are unset, the reason is shown in the output. To disable the integration entirely, pass
 `update_immich=false`.
+
+### Logging
+
+`epm` maintains logs at three levels:
+
+| Location | Content | Lifetime |
+| --- | --- | --- |
+| `~/.epm/epm.log` (local) | One line per invocation: timestamp, action, host, video, outcome | Permanent |
+| `~/epm-logs/{session}.log` (remote) | Full console output captured via tmux `pipe-pane` | 30-day auto-cleanup |
+| `{output}/logs/console.log` (remote) | Copy of console output alongside extracted photos | Permanent |
+
+The local log is tab-separated with actions `start`, `reattach`, and `done`. Example:
+
+```
+2026-02-04 14:30:00	start	immich_lxc	/data/videos/sunset.mp4	-s 0.5
+2026-02-04 14:35:22	done	immich_lxc	/data/videos/sunset.mp4	12 photos, success
+```
+
+The per-video extraction log (`{output}/logs/{video}.log`) is unchanged and continues to record detailed extraction
+decisions.

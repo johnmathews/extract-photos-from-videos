@@ -42,6 +42,30 @@ Prerequisites:
 USAGE
 }
 
+# --- Local logging ---
+LOCAL_LOG="$HOME/.epm/epm.log"
+
+log_local() {
+    mkdir -p "$HOME/.epm"
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+        "$(date '+%Y-%m-%d %H:%M:%S')" "$1" "$2" "$3" "$4" >> "$LOCAL_LOG"
+}
+
+read_remote_result() {
+    local result
+    result=$(ssh "$SSH_HOST" "cat /tmp/epm-result-$SESSION_NAME 2>/dev/null") || true
+    if [ -n "$result" ]; then
+        local r_exit r_photos r_status
+        r_exit=$(echo "$result" | sed -n '1p')
+        r_photos=$(echo "$result" | sed -n '2p')
+        r_status=$(echo "$result" | sed -n '3p')
+        log_local "done" "$HOST_LABEL" "$VIDEO" "${r_photos} photos, ${r_status}"
+        ssh "$SSH_HOST" "rm -f /tmp/epm-result-$SESSION_NAME" 2>/dev/null || true
+    else
+        log_local "done" "$HOST_LABEL" "$VIDEO" "outcome unknown"
+    fi
+}
+
 # --- Parse arguments ---
 VIDEO=""
 OUTPUT="/mnt/nfs/photos/reference"
@@ -132,8 +156,10 @@ SESSION_NAME="epm-$(printf '%s' "$VIDEO" | shasum | cut -c1-8)"
 
 # --- Check for existing tmux session (reattach after disconnect) ---
 if ssh "$SSH_HOST" "tmux has-session -t $SESSION_NAME 2>/dev/null"; then
+    log_local "reattach" "$HOST_LABEL" "$VIDEO" ""
     echo "Reattaching to running extraction..."
     ssh -tt "$SSH_HOST" "tmux attach-session -t $SESSION_NAME" </dev/tty
+    read_remote_result
     exit 0
 fi
 
@@ -186,6 +212,8 @@ SETUP
 echo "Extracting photos from: $VIDEO"
 echo "Output directory: $OUTPUT"
 
+log_local "start" "$HOST_LABEL" "$VIDEO" "${EXTRA_ARGS[*]+"${EXTRA_ARGS[*]}"}"
+
 # Upload the extraction script to a temp file on the remote, then execute it
 # with -tt. This avoids the PTY-vs-heredoc conflict where -tt causes the
 # heredoc to be interpreted interactively and child processes consume stdin.
@@ -197,10 +225,20 @@ set -euo pipefail
 VIDEO="$1"
 OUTPUT="$2"
 UPDATE_IMMICH="$3"
-shift 3
+SESSION_NAME="$4"
+shift 4
 
 # Remaining args are extra flags for main.py
 EXTRA=("$@")
+
+RESULT_FILE="/tmp/epm-result-$SESSION_NAME"
+
+write_result() {
+    printf '%s\n%s\n%s\n' "$1" "$2" "$3" > "$RESULT_FILE"
+}
+
+# Clean up old console logs (>30 days)
+find ~/epm-logs -name "epm-*.log" -mtime +30 -delete 2>/dev/null || true
 
 REPO_DIR="$HOME/extract-photos"
 
@@ -239,13 +277,13 @@ if $HAS_JPG && $HAS_VID; then
     read -p "(s)kip or (o)verwrite? [s/o]: " CHOICE
     case "$CHOICE" in
         o|O) ;;
-        *) echo "Skipping."; exit 0 ;;
+        *) echo "Skipping."; write_result 0 0 skipped; exit 0 ;;
     esac
 fi
 
 # Create temp directory with cleanup trap
 TMPDIR="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR"' EXIT
+trap 'write_result 1 0 interrupted; rm -rf "$TMPDIR"' EXIT
 
 # Symlink the video into the temp directory
 ln -s "$(realpath "$VIDEO")" "$TMPDIR/"
@@ -259,12 +297,14 @@ EXTRACTED_DIR="$(find "$EXTRACTED_BASE" -mindepth 1 -maxdepth 1 -type d | head -
 
 if [ -z "$EXTRACTED_DIR" ] || [ ! -d "$EXTRACTED_DIR" ]; then
     echo "No photos extracted."
+    write_result 0 0 no_photos
     exit 0
 fi
 
 PHOTO_COUNT="$(find "$EXTRACTED_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')"
 if [ "$PHOTO_COUNT" -eq 0 ]; then
     echo "No photos extracted."
+    write_result 0 0 no_photos
     exit 0
 fi
 
@@ -307,14 +347,28 @@ else
         python -m extract_photos.immich "${IMMICH_ARGS[@]}"
     fi
 fi
+
+# Copy console log alongside the extraction output
+if [ -f "$HOME/epm-logs/$SESSION_NAME.log" ] && [ -d "${FINAL_OUTPUT:-}" ]; then
+    mkdir -p "$FINAL_OUTPUT/logs"
+    cp "$HOME/epm-logs/$SESSION_NAME.log" "$FINAL_OUTPUT/logs/console.log" 2>/dev/null || true
+fi
+
+# Write success result (reset trap first to avoid writing "interrupted")
+trap 'rm -rf "$TMPDIR"' EXIT
+write_result 0 "$PHOTO_COUNT" success
 EXTRACTION
 
 # Start extraction inside a tmux session for resilience against SSH drops.
 # If the connection is lost (e.g. laptop lid close), tmux keeps the process
 # alive. Re-running the same epm command reattaches to the running session.
 ssh "$SSH_HOST" "tmux new-session -d -s $SESSION_NAME \
-    \"trap 'rm -f $REMOTE_SCRIPT' EXIT; bash -l $REMOTE_SCRIPT $(printf '%q ' "$VIDEO" "$OUTPUT" "$UPDATE_IMMICH" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"); stty sane; echo; echo 'Press Enter to close.'; read\""
+    \"trap 'rm -f $REMOTE_SCRIPT' EXIT; bash -l $REMOTE_SCRIPT $(printf '%q ' "$VIDEO" "$OUTPUT" "$UPDATE_IMMICH" "$SESSION_NAME" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"); stty sane; echo; echo 'Press Enter to close.'; read\""
+
+# Capture all console output to a log file on the remote host
+ssh "$SSH_HOST" "mkdir -p ~/epm-logs && tmux pipe-pane -t $SESSION_NAME 'cat >> ~/epm-logs/$SESSION_NAME.log'"
 
 ssh -tt "$SSH_HOST" "tmux attach-session -t $SESSION_NAME" </dev/tty
 
+read_remote_result
 echo "Done."
