@@ -268,7 +268,7 @@ print(make_safe_folder_name(name))
 " "$VIDEO")
 FINAL_OUTPUT="$OUTPUT/$VIDEO_SUBDIR"
 
-# Check for existing output (has both .jpg and video files)
+# Check for existing output (photos and/or video files)
 HAS_JPG=false
 HAS_VID=false
 if [ -d "$FINAL_OUTPUT" ]; then
@@ -285,7 +285,20 @@ if $HAS_JPG && $HAS_VID; then
     echo "Output already exists: $FINAL_OUTPUT"
     read -p "(s)kip or (o)verwrite? [s/o]: " CHOICE
     case "$CHOICE" in
-        o|O) ;;
+        o|O)
+            echo "Removing old output..."
+            rm -rf "$FINAL_OUTPUT"
+            ;;
+        *) echo "Skipping."; write_result 0 0 skipped; exit 0 ;;
+    esac
+elif $HAS_JPG; then
+    echo "Incomplete output found (photos but no video): $FINAL_OUTPUT"
+    read -p "(s)kip or (o)verwrite? [s/o]: " CHOICE
+    case "$CHOICE" in
+        o|O)
+            echo "Removing old output..."
+            rm -rf "$FINAL_OUTPUT"
+            ;;
         *) echo "Skipping."; write_result 0 0 skipped; exit 0 ;;
     esac
 fi
