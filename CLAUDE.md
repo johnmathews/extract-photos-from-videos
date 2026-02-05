@@ -29,7 +29,7 @@ uv run pyright
 # Run Python tests (fast unit tests only)
 uv run pytest tests/
 
-# Run slow integration tests (requires test video in test-video/)
+# Run slow integration tests (requires test video in test-videos/test-video-1/)
 uv run pytest tests/test_video_integration.py -m slow
 
 # Run shell tests for bin/epm
@@ -52,10 +52,11 @@ Each video goes through three phases:
 1. **Transcode** — ffmpeg creates a 320px-wide low-res temp copy (no audio). Always uses software encoding (VAAPI
    overhead exceeds savings at 320px).
 2. **Scan** — Single-threaded scan of the low-res copy. Steps through frames at `step_time` intervals, detects uniform
-   borders, rejects near-uniform frames (black/white screens), deduplicates via perceptual hashing. Uses both
-   step-to-step comparison (threshold 3, detects back-to-back photo transitions) and first-detection comparison
-   (threshold 10, detects photos separated by non-photo content). Resets hash state when transitioning from photo to
-   non-photo frames. Collects timestamps of unique photos.
+   borders via `detect_almost_uniform_borders()` (supports three patterns: all-4-borders uniform for white-bordered
+   photos, pillarbox for black side borders, letterbox for black top/bottom borders), rejects near-uniform frames
+   (black/white screens), deduplicates via perceptual hashing. Uses both step-to-step comparison (threshold 3, detects
+   back-to-back photo transitions) and first-detection comparison (threshold 10, detects photos separated by non-photo
+   content). Resets hash state when transitioning from photo to non-photo frames. Collects timestamps of unique photos.
 3. **Extract** — Opens the original full-res video, seeks to each discovered timestamp, runs border trimming and
    validation (minimum area as % of frame, near-uniform, screenshot detection), saves as JPEG.
 
@@ -100,9 +101,10 @@ Key modules in `extract_photos/`:
   metadata. Can be run directly:
   `python extract_photos/immich.py --api-url ... --api-key ... --library-id ... --asset-path ... --video-filename ...`.
 
-**test-video/** - Contains a test video and ground-truth timestamp files: `photo-timestamps.txt` (standard single photos)
-and `edge-cases.txt` (side-by-side photos and similar sequential photos). Used by the slow integration tests in
-`tests/test_video_integration.py`.
+**test-videos/** - Contains test video directories (`test-video-1/`, `test-video-2/`), each with a test video and
+ground-truth timestamp files: `photo-timestamps.txt` (expected photos) and optionally `edge-cases.txt` (side-by-side
+photos and similar sequential photos). `test-video-1` has white-bordered photos (all-4-borders uniform),
+`test-video-2` has black pillarbox-bordered photos. Used by the slow integration tests in `tests/test_video_integration.py`.
 
 **bin/epm** - Bash wrapper that SSHes into a remote host to run the tool on a single video. Accepts `host=NAME` to select
 the target: `immich_lxc` (default, SSH host `immich`) or `media_vm` (SSH host `media`). Auto-installs repo/deps on first

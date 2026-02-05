@@ -102,17 +102,28 @@ def hash_difference(hash1: np.ndarray, hash2: np.ndarray) -> int:
     return np.count_nonzero(hash1 != hash2)
 
 
-def detect_almost_uniform_borders(frame: np.ndarray, border_width: int = 5, threshold: float = 10) -> bool:
+def detect_almost_uniform_borders(frame: np.ndarray, border_width: int = 5, threshold: float = 5, pillarbox_threshold: float = 1) -> bool:
     """
     Checks if a frame has almost uniform borders.
 
+    Detects three border patterns:
+    1. All four borders uniform (photos with full border, e.g. white borders)
+    2. Left + Right borders uniform AND truly black (pillarbox/side borders only)
+    3. Top + Bottom borders uniform AND truly black (letterbox/top-bottom borders only)
+
+    The all-4-borders check uses threshold=5 to avoid false positives from dark video
+    scenes. Pillarbox/letterbox detection requires both very low std (threshold=1) AND
+    truly black pixels (max value < 3) to distinguish real pillarbox bars from dark
+    video content that happens to have uniform edges.
+
     Parameters:
         frame (np.array): The input video frame (grayscale or color).
-        border_width (int): The width of the borders to check.
-        threshold (float): Maximum allowed standard deviation for uniformity.
+        border_width (int): The width of the borders to check (default 5).
+        threshold (float): Max std deviation for all-4-borders uniformity (default 5).
+        pillarbox_threshold (float): Stricter std threshold for pillarbox/letterbox (default 1).
 
     Returns:
-        bool: True if all borders are almost uniform, False otherwise.
+        bool: True if borders match any of the three patterns, False otherwise.
     """
     # Convert frame to grayscale if it is not already
     gray_frame = (
@@ -131,14 +142,33 @@ def detect_almost_uniform_borders(frame: np.ndarray, border_width: int = 5, thre
     top_std = np.std(top_border)  # type: ignore[reportArgumentType]
     bottom_std = np.std(bottom_border)  # type: ignore[reportArgumentType]
 
-    # Check if the standard deviation for all borders is below the threshold
-    is_left_uniform = left_std <= threshold
-    is_right_uniform = right_std <= threshold
-    is_top_uniform = top_std <= threshold
-    is_bottom_uniform = bottom_std <= threshold
+    # Pattern 1: All four borders uniform (threshold 10)
+    all_four_uniform = (
+        left_std <= threshold and right_std <= threshold and
+        top_std <= threshold and bottom_std <= threshold
+    )
+    if all_four_uniform:
+        return True
 
-    # A valid frame must have all borders almost uniform
-    return is_left_uniform and is_right_uniform and is_top_uniform and is_bottom_uniform
+    # Pattern 2: Pillarbox - left and right borders very uniform (stricter threshold)
+    # Also require borders to be truly black (max pixel value < 3) to avoid dark scene false positives
+    pillarbox = left_std <= pillarbox_threshold and right_std <= pillarbox_threshold
+    if pillarbox:
+        left_max = np.max(left_border)
+        right_max = np.max(right_border)
+        if left_max < 3 and right_max < 3:
+            return True
+
+    # Pattern 3: Letterbox - top and bottom borders very uniform (stricter threshold)
+    # Also require borders to be truly black (max pixel value < 3) to avoid dark scene false positives
+    letterbox = top_std <= pillarbox_threshold and bottom_std <= pillarbox_threshold
+    if letterbox:
+        top_max = np.max(top_border)
+        bottom_max = np.max(bottom_border)
+        if top_max < 3 and bottom_max < 3:
+            return True
+
+    return False
 
 
 def _is_near_uniform(image: np.ndarray, std_threshold: float = 5.0) -> str | None:

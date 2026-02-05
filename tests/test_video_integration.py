@@ -20,7 +20,7 @@ from extract_photos.extract import (
 )
 from extract_photos.utils import setup_logger
 
-TEST_VIDEO_DIR = os.path.join(os.path.dirname(__file__), "..", "test-video")
+TEST_VIDEO_DIR = os.path.join(os.path.dirname(__file__), "..", "test-videos", "test-video-1")
 TIMESTAMPS_FILE = os.path.join(TEST_VIDEO_DIR, "photo-timestamps.txt")
 EDGE_CASES_FILE = os.path.join(TEST_VIDEO_DIR, "edge-cases.txt")
 TOLERANCE_SEC = 3.0  # match tolerance between expected and detected timestamps
