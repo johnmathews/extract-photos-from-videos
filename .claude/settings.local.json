@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(printf:*)",
+      "Bash(shasum:*)",
+      "Bash(col:*)",
+      "WebFetch(domain:www.answeroverflow.com)",
+      "Bash(uv pip install:*)",
+      "Bash(pyan3:*)",
+      "Bash(dot:*)",
+      "Bash(grep:*)"
     ]
   }
 }
