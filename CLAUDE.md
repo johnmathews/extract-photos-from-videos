@@ -152,4 +152,5 @@ positives are suppressed with inline `# type: ignore` comments.
 
 ## User shorthand commands
 
-- **dcp** — "document, commit, push": Stage all changes, commit with a descriptive message, and push to origin.
+- **dcp** — "document, commit, push": 1. Update documentation (CLAUDE.md, README, docstrings, etc.) to reflect recent
+  changes, 2. Commit the changes with a helpful commit message, 3. Push the repo to the remote.
