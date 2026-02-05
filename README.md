@@ -261,6 +261,6 @@ If any required variables are unset, the reason is shown in the output. To disab
 | --- | --- | --- |
 | `logs/{timestamp}_{video}.log` (local, in repo) | Full console output copied from remote after each run | Permanent |
 | `~/extract-photos/logs/{session}.log` (remote) | Full console output captured via tmux `pipe-pane` | 30-day auto-cleanup |
-| `{output}/logs/console.txt` (remote) | Copy of console output alongside extracted photos | Permanent |
+| `{output}/logs/{timestamp}.txt` (remote) | Copy of console output alongside extracted photos | Permanent |
 
 Local log files are named like `2026-02-04_143000_sunset.log` (timestamp + sanitized video name).
