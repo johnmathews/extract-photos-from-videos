@@ -15,19 +15,32 @@ from pathlib import Path
 
 
 def immich_request(
-    url: str, api_key: str, method: str = "GET", data: dict | None = None
+    url: str, api_key: str, method: str = "GET", data: dict | None = None, retries: int = 3
 ) -> dict | list | None:
-    """Make an authenticated request to the Immich API."""
+    """Make an authenticated request to the Immich API.
+
+    Retries on connection errors (e.g., Immich restarting) with exponential backoff.
+    """
     body = json.dumps(data).encode() if data is not None else None
-    req = urllib.request.Request(url, data=body, method=method)
-    req.add_header("x-api-key", api_key)
-    if body is not None:
-        req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req) as resp:
-        content = resp.read()
-        if not content:
-            return None
-        return json.loads(content)
+    last_error = None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, data=body, method=method)
+            req.add_header("x-api-key", api_key)
+            if body is not None:
+                req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                content = resp.read()
+                if not content:
+                    return None
+                return json.loads(content)
+        except (urllib.error.URLError, ConnectionRefusedError, TimeoutError) as e:
+            last_error = e
+            if attempt < retries - 1:
+                wait = 2 ** attempt  # 1s, 2s, 4s
+                print(f"  Connection error, retrying in {wait}s...", file=sys.stderr)
+                time.sleep(wait)
+    raise last_error  # type: ignore[misc]
 
 
 def trigger_scan(api_url: str, api_key: str, library_id: str) -> None:
