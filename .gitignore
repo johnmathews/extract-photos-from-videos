@@ -17,3 +17,6 @@ htmlcov/
 
 # Dont include the test video
 test-video/
+
+# Local epm logs
+logs/

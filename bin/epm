@@ -43,27 +43,32 @@ USAGE
 }
 
 # --- Local logging ---
-LOCAL_LOG="$HOME/.epm/epm.log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOCAL_LOGS_DIR="$SCRIPT_DIR/../logs"
+RUN_TIMESTAMP="$(date '+%Y-%m-%d_%H%M%S')"
 
-log_local() {
-    mkdir -p "$HOME/.epm"
-    printf '%s\t%s\t%s\t%s\t%s\n' \
-        "$(date '+%Y-%m-%d %H:%M:%S')" "$1" "$2" "$3" "$4" >> "$LOCAL_LOG"
+copy_remote_log() {
+    # Copy remote console log to local logs directory
+    mkdir -p "$LOCAL_LOGS_DIR"
+    local video_basename
+    video_basename="$(basename "$VIDEO")"
+    # Remove extension and sanitize for filename
+    video_basename="${video_basename%.*}"
+    video_basename="$(echo "$video_basename" | tr -cd '[:alnum:]_-')"
+    local local_log="$LOCAL_LOGS_DIR/${RUN_TIMESTAMP}_${video_basename}.log"
+    scp -q "$SSH_HOST:~/extract-photos/logs/$SESSION_NAME.log" "$local_log" 2>/dev/null || true
+    if [ -f "$local_log" ]; then
+        echo "Log saved to: $local_log"
+    fi
 }
 
 read_remote_result() {
     local result
     result=$(ssh "$SSH_HOST" "cat /tmp/epm-result-$SESSION_NAME 2>/dev/null") || true
     if [ -n "$result" ]; then
-        local r_exit r_photos r_status
-        r_exit=$(echo "$result" | sed -n '1p')
-        r_photos=$(echo "$result" | sed -n '2p')
-        r_status=$(echo "$result" | sed -n '3p')
-        log_local "done" "$HOST_LABEL" "$VIDEO" "${r_photos} photos, ${r_status}"
         ssh "$SSH_HOST" "rm -f /tmp/epm-result-$SESSION_NAME" 2>/dev/null || true
-    else
-        log_local "done" "$HOST_LABEL" "$VIDEO" "outcome unknown"
     fi
+    copy_remote_log
 }
 
 # --- Parse arguments ---
@@ -156,7 +161,6 @@ SESSION_NAME="epm-$(printf '%s' "$VIDEO" | shasum | cut -c1-8)"
 
 # --- Check for existing tmux session (reattach after disconnect) ---
 if ssh "$SSH_HOST" "tmux has-session -t $SESSION_NAME 2>/dev/null"; then
-    log_local "reattach" "$HOST_LABEL" "$VIDEO" ""
     echo "Reattaching to running extraction..."
     ssh -tt "$SSH_HOST" "tmux attach-session -t $SESSION_NAME" </dev/tty
     read_remote_result
@@ -212,8 +216,6 @@ SETUP
 echo "Extracting photos from: $VIDEO"
 echo "Output directory: $OUTPUT"
 
-log_local "start" "$HOST_LABEL" "$VIDEO" "${EXTRA_ARGS[*]+"${EXTRA_ARGS[*]}"}"
-
 # Upload the extraction script to a temp file on the remote, then execute it
 # with -tt. This avoids the PTY-vs-heredoc conflict where -tt causes the
 # heredoc to be interpreted interactively and child processes consume stdin.
@@ -238,7 +240,7 @@ write_result() {
 }
 
 # Clean up old console logs (>30 days)
-find ~/epm-logs -name "epm-*.log" -mtime +30 -delete 2>/dev/null || true
+find ~/extract-photos/logs -name "epm-*.log" -mtime +30 -delete 2>/dev/null || true
 
 REPO_DIR="$HOME/extract-photos"
 
@@ -349,9 +351,9 @@ else
 fi
 
 # Copy console log alongside the extraction output
-if [ -f "$HOME/epm-logs/$SESSION_NAME.log" ] && [ -d "${FINAL_OUTPUT:-}" ]; then
+if [ -f "$HOME/extract-photos/logs/$SESSION_NAME.log" ] && [ -d "${FINAL_OUTPUT:-}" ]; then
     mkdir -p "$FINAL_OUTPUT/logs"
-    cp "$HOME/epm-logs/$SESSION_NAME.log" "$FINAL_OUTPUT/logs/console.log" 2>/dev/null || true
+    cp "$HOME/extract-photos/logs/$SESSION_NAME.log" "$FINAL_OUTPUT/logs/console.log" 2>/dev/null || true
 fi
 
 # Write success result (reset trap first to avoid writing "interrupted")
@@ -366,7 +368,7 @@ ssh "$SSH_HOST" "tmux new-session -d -s $SESSION_NAME \
     \"trap 'rm -f $REMOTE_SCRIPT' EXIT; bash -l $REMOTE_SCRIPT $(printf '%q ' "$VIDEO" "$OUTPUT" "$UPDATE_IMMICH" "$SESSION_NAME" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"); stty sane; echo; echo 'Press Enter to close.'; read\""
 
 # Capture all console output to a log file on the remote host
-ssh "$SSH_HOST" "mkdir -p ~/epm-logs && tmux pipe-pane -t $SESSION_NAME 'cat >> ~/epm-logs/$SESSION_NAME.log'"
+ssh "$SSH_HOST" "mkdir -p ~/extract-photos/logs && tmux pipe-pane -t $SESSION_NAME 'cat >> ~/extract-photos/logs/$SESSION_NAME.log'"
 
 ssh -tt "$SSH_HOST" "tmux attach-session -t $SESSION_NAME" </dev/tty
 

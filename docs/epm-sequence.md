@@ -76,7 +76,8 @@ sequenceDiagram
 
         epm->>SSH: Read result file
         SSH-->>epm: exit_code, photo_count, status
-        epm->>epm: Log to ~/.epm/epm.log
+        epm->>SSH: Copy console log to local
+        SSH-->>epm: logs/{timestamp}_{video}.log
     end
 
     epm-->>User: Done
