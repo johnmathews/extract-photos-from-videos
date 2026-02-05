@@ -264,3 +264,11 @@ If any required variables are unset, the reason is shown in the output. To disab
 | `{output}/logs/{timestamp}.txt` (remote) | Copy of console output alongside extracted photos | Permanent |
 
 Local log files are named like `2026-02-04_143000_sunset.log` (timestamp + sanitized video name).
+
+## Architecture Documentation
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for diagrams showing:
+- EPM control flow (main decision tree)
+- Local ↔ remote sequence diagram (SSH/tmux interaction)
+- Python pipeline detail (three-phase extraction)
+- Function call graphs (manual, auto-generated, and UML)
