@@ -115,6 +115,11 @@ a tmux session on the remote host for resilience: if the SSH connection drops (e
 process alive. Re-running the same epm command detects the existing tmux session and reattaches. The session name is
 derived from the video path (`epm-<hash>`). After the extraction finishes, the tmux session waits for Enter so the user
 can see the final output before the session closes. Requires tmux on the remote host (checked during auto-setup).
+Logging: each invocation writes a one-line summary to `~/.epm/epm.log` (local, tab-separated: timestamp, action, host,
+video, info). Actions are `start`, `reattach`, `done`. Full console output is captured on the remote via tmux `pipe-pane`
+to `~/epm-logs/{session}.log` (auto-cleaned after 30 days) and copied to `{output}/logs/console.log`. A machine-readable
+result file (`/tmp/epm-result-{session}`, 3 lines: exit_code, photo_count, status) is written by the extraction script
+and read by the local side to record the outcome in the local log.
 
 ## Output structure
 
@@ -144,3 +149,7 @@ opencv-python (video/image I/O), numpy.
 Line length: 120 (configured for black, flake8 in pyproject.toml). All functions have type annotations; pyright is
 configured in standard mode, scoped to `extract_photos/` via `include` (`uv run pyright`). Numpy/opencv stub false
 positives are suppressed with inline `# type: ignore` comments.
+
+## User shorthand commands
+
+- **dcp** — "document, commit, push": Stage all changes, commit with a descriptive message, and push to origin.
