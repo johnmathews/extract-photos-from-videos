@@ -1,0 +1,179 @@
+digraph callgraph {
+  rankdir=TB;
+  node [shape=box, fontname="Helvetica"];
+  edge [color="#666666"];
+
+  subgraph cluster_batch_processor {
+    label="batch_processor.py";
+    style=filled;
+    color="#e8f4f8";
+    "batch_processor:_has_existing_output" [label="_has_existing_output"];
+    "batch_processor:process_videos_in_directory" [label="process_videos_in_directory"];
+  }
+
+  subgraph cluster_borders {
+    label="borders.py";
+    style=filled;
+    color="#e8f4f8";
+    "borders:_find_text_gap_from_edge" [label="_find_text_gap_from_edge"];
+    "borders:_detect_text_padding" [label="_detect_text_padding"];
+    "borders:trim_and_add_border" [label="trim_and_add_border"];
+  }
+
+  subgraph cluster_display_progress {
+    label="display_progress.py";
+    style=filled;
+    color="#e8f4f8";
+    "display_progress:format_time" [label="format_time"];
+    "display_progress:build_progress_bar" [label="build_progress_bar"];
+    "display_progress:print_scan_progress" [label="print_scan_progress"];
+  }
+
+  subgraph cluster_extract {
+    label="extract.py";
+    style=filled;
+    color="#e8f4f8";
+    "extract:_is_vaapi_available" [label="_is_vaapi_available"];
+    "extract:_lowres_encode_args" [label="_lowres_encode_args"];
+    "extract:_playback_encode_args" [label="_playback_encode_args"];
+    "extract:_ts" [label="_ts"];
+    "extract:compute_frame_hash" [label="compute_frame_hash"];
+    "extract:hash_difference" [label="hash_difference"];
+    "extract:detect_almost_uniform_borders" [label="detect_almost_uniform_borders"];
+    "extract:_is_near_uniform" [label="_is_near_uniform"];
+    "extract:_white_background_percentage" [label="_white_background_percentage"];
+    "extract:_is_screenshot" [label="_is_screenshot"];
+    "extract:_read_ffmpeg_progress" [label="_read_ffmpeg_progress"];
+    "extract:transcode_lowres" [label="transcode_lowres"];
+    "extract:scan_for_photos" [label="scan_for_photos"];
+    "extract:_rejection_reason" [label="_rejection_reason"];
+    "extract:get_video_metadata" [label="get_video_metadata"];
+    "extract:extract_fullres_frames" [label="extract_fullres_frames"];
+    "extract:transcode_for_playback" [label="transcode_for_playback"];
+    "extract:extract_photos_from_video" [label="extract_photos_from_video"];
+  }
+
+  subgraph cluster_immich {
+    label="immich.py";
+    style=filled;
+    color="#e8f4f8";
+    "immich:immich_request" [label="immich_request"];
+    "immich:trigger_scan" [label="trigger_scan"];
+    "immich:purge_existing_assets" [label="purge_existing_assets"];
+    "immich:poll_for_assets" [label="poll_for_assets"];
+    "immich:parse_album_name" [label="parse_album_name"];
+    "immich:find_or_create_album" [label="find_or_create_album"];
+    "immich:add_assets_to_album" [label="add_assets_to_album"];
+    "immich:find_user" [label="find_user"];
+    "immich:share_album" [label="share_album"];
+    "immich:send_pushover" [label="send_pushover"];
+    "immich:get_video_date" [label="get_video_date"];
+    "immich:parse_video_timestamp" [label="parse_video_timestamp"];
+    "immich:update_asset_date" [label="update_asset_date"];
+    "immich:order_assets" [label="order_assets"];
+    "immich:main" [label="main"];
+  }
+
+  subgraph cluster_main {
+    label="main.py";
+    style=filled;
+    color="#e8f4f8";
+    "main:main" [label="main"];
+  }
+
+  subgraph cluster_transcode_playback {
+    label="transcode_playback.py";
+    style=filled;
+    color="#e8f4f8";
+    "transcode_playback:main" [label="main"];
+  }
+
+  subgraph cluster_utils {
+    label="utils.py";
+    style=filled;
+    color="#e8f4f8";
+    "utils:make_safe_folder_name" [label="make_safe_folder_name"];
+    "utils:setup_logger" [label="setup_logger"];
+    "utils:is_valid_photo" [label="is_valid_photo"];
+  }
+
+  "batch_processor:process_videos_in_directory" -> "utils:make_safe_folder_name";
+  "batch_processor:process_videos_in_directory" -> "batch_processor:_has_existing_output";
+  "batch_processor:process_videos_in_directory" -> "extract:extract_photos_from_video";
+  "borders:_detect_text_padding" -> "borders:_find_text_gap_from_edge";
+  "borders:_detect_text_padding" -> "borders:_find_text_gap_from_edge";
+  "borders:_detect_text_padding" -> "borders:_find_text_gap_from_edge";
+  "borders:_detect_text_padding" -> "borders:_find_text_gap_from_edge";
+  "borders:trim_and_add_border" -> "borders:_detect_text_padding";
+  "display_progress:print_scan_progress" -> "display_progress:build_progress_bar";
+  "display_progress:print_scan_progress" -> "display_progress:format_time";
+  "display_progress:print_scan_progress" -> "display_progress:format_time";
+  "extract:_playback_encode_args" -> "extract:_is_vaapi_available";
+  "extract:transcode_lowres" -> "extract:_lowres_encode_args";
+  "extract:transcode_lowres" -> "display_progress:format_time";
+  "extract:transcode_lowres" -> "display_progress:build_progress_bar";
+  "extract:transcode_lowres" -> "display_progress:build_progress_bar";
+  "extract:transcode_lowres" -> "display_progress:format_time";
+  "extract:scan_for_photos" -> "display_progress:format_time";
+  "extract:scan_for_photos" -> "display_progress:print_scan_progress";
+  "extract:scan_for_photos" -> "extract:detect_almost_uniform_borders";
+  "extract:scan_for_photos" -> "extract:compute_frame_hash";
+  "extract:scan_for_photos" -> "display_progress:print_scan_progress";
+  "extract:scan_for_photos" -> "extract:_is_near_uniform";
+  "extract:scan_for_photos" -> "extract:hash_difference";
+  "extract:scan_for_photos" -> "extract:hash_difference";
+  "extract:scan_for_photos" -> "display_progress:format_time";
+  "extract:_rejection_reason" -> "extract:_is_near_uniform";
+  "extract:_rejection_reason" -> "extract:_is_screenshot";
+  "extract:extract_fullres_frames" -> "utils:make_safe_folder_name";
+  "extract:extract_fullres_frames" -> "borders:trim_and_add_border";
+  "extract:extract_fullres_frames" -> "extract:_rejection_reason";
+  "extract:transcode_for_playback" -> "extract:_playback_encode_args";
+  "extract:transcode_for_playback" -> "display_progress:format_time";
+  "extract:transcode_for_playback" -> "extract:_is_vaapi_available";
+  "extract:transcode_for_playback" -> "display_progress:build_progress_bar";
+  "extract:transcode_for_playback" -> "display_progress:build_progress_bar";
+  "extract:transcode_for_playback" -> "display_progress:format_time";
+  "extract:extract_photos_from_video" -> "utils:make_safe_folder_name";
+  "extract:extract_photos_from_video" -> "utils:setup_logger";
+  "extract:extract_photos_from_video" -> "extract:get_video_metadata";
+  "extract:extract_photos_from_video" -> "extract:transcode_lowres";
+  "extract:extract_photos_from_video" -> "extract:scan_for_photos";
+  "extract:extract_photos_from_video" -> "extract:extract_fullres_frames";
+  "extract:extract_photos_from_video" -> "display_progress:format_time";
+  "extract:extract_photos_from_video" -> "display_progress:format_time";
+  "extract:extract_photos_from_video" -> "extract:_ts";
+  "extract:extract_photos_from_video" -> "extract:_ts";
+  "extract:extract_photos_from_video" -> "extract:_is_vaapi_available";
+  "extract:extract_photos_from_video" -> "extract:_ts";
+  "extract:extract_photos_from_video" -> "extract:_ts";
+  "extract:extract_photos_from_video" -> "extract:_ts";
+  "immich:trigger_scan" -> "immich:immich_request";
+  "immich:purge_existing_assets" -> "immich:immich_request";
+  "immich:purge_existing_assets" -> "immich:immich_request";
+  "immich:poll_for_assets" -> "immich:immich_request";
+  "immich:find_or_create_album" -> "immich:immich_request";
+  "immich:find_or_create_album" -> "immich:immich_request";
+  "immich:add_assets_to_album" -> "immich:immich_request";
+  "immich:find_user" -> "immich:immich_request";
+  "immich:share_album" -> "immich:immich_request";
+  "immich:update_asset_date" -> "immich:immich_request";
+  "immich:order_assets" -> "immich:parse_video_timestamp";
+  "immich:main" -> "immich:parse_album_name";
+  "immich:main" -> "immich:poll_for_assets";
+  "immich:main" -> "immich:order_assets";
+  "immich:main" -> "immich:get_video_date";
+  "immich:main" -> "immich:purge_existing_assets";
+  "immich:main" -> "immich:trigger_scan";
+  "immich:main" -> "immich:find_or_create_album";
+  "immich:main" -> "immich:immich_request";
+  "immich:main" -> "immich:add_assets_to_album";
+  "immich:main" -> "immich:parse_video_timestamp";
+  "immich:main" -> "immich:update_asset_date";
+  "immich:main" -> "immich:add_assets_to_album";
+  "immich:main" -> "immich:find_user";
+  "immich:main" -> "immich:send_pushover";
+  "immich:main" -> "immich:share_album";
+  "main:main" -> "batch_processor:process_videos_in_directory";
+  "transcode_playback:main" -> "extract:transcode_for_playback";
+}

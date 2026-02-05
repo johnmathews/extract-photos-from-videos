@@ -1,0 +1,20 @@
+digraph "packages_extract_photos" {
+rankdir=BT
+charset="utf-8"
+"extract_photos" [color="black", label=<extract_photos>, shape="box", style="solid"];
+"extract_photos.batch_processor" [color="black", label=<extract_photos.batch_processor>, shape="box", style="solid"];
+"extract_photos.borders" [color="black", label=<extract_photos.borders>, shape="box", style="solid"];
+"extract_photos.display_progress" [color="black", label=<extract_photos.display_progress>, shape="box", style="solid"];
+"extract_photos.extract" [color="black", label=<extract_photos.extract>, shape="box", style="solid"];
+"extract_photos.immich" [color="black", label=<extract_photos.immich>, shape="box", style="solid"];
+"extract_photos.main" [color="black", label=<extract_photos.main>, shape="box", style="solid"];
+"extract_photos.transcode_playback" [color="black", label=<extract_photos.transcode_playback>, shape="box", style="solid"];
+"extract_photos.utils" [color="black", label=<extract_photos.utils>, shape="box", style="solid"];
+"extract_photos.batch_processor" -> "extract_photos.extract" [arrowhead="open", arrowtail="none"];
+"extract_photos.batch_processor" -> "extract_photos.utils" [arrowhead="open", arrowtail="none"];
+"extract_photos.extract" -> "extract_photos.borders" [arrowhead="open", arrowtail="none"];
+"extract_photos.extract" -> "extract_photos.display_progress" [arrowhead="open", arrowtail="none"];
+"extract_photos.extract" -> "extract_photos.utils" [arrowhead="open", arrowtail="none"];
+"extract_photos.main" -> "extract_photos.batch_processor" [arrowhead="open", arrowtail="none"];
+"extract_photos.transcode_playback" -> "extract_photos.extract" [arrowhead="open", arrowtail="none"];
+}
