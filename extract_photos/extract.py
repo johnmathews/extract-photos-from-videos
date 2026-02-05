@@ -721,7 +721,15 @@ def transcode_for_playback(video_file: str, output_dir: str) -> str:
     if proc.returncode != 0:
         raise RuntimeError(f"ffmpeg transcode failed (exit code: {proc.returncode})")
 
-    print(f"Saved transcoded video to {out_path}", file=sys.stderr, flush=True)
+    # Verify the output file exists and has non-zero size (important for NFS)
+    if not os.path.exists(out_path):
+        raise RuntimeError(f"ffmpeg reported success but output file does not exist: {out_path}")
+    file_size = os.path.getsize(out_path)
+    if file_size == 0:
+        os.unlink(out_path)
+        raise RuntimeError(f"ffmpeg created empty output file: {out_path}")
+
+    print(f"Saved transcoded video to {out_path} ({file_size / 1024 / 1024:.1f} MB)", file=sys.stderr, flush=True)
     return out_name
 
 
