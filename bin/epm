@@ -353,7 +353,7 @@ fi
 # Copy console log alongside the extraction output
 if [ -f "$HOME/extract-photos/logs/$SESSION_NAME.log" ] && [ -d "${FINAL_OUTPUT:-}" ]; then
     mkdir -p "$FINAL_OUTPUT/logs"
-    cp "$HOME/extract-photos/logs/$SESSION_NAME.log" "$FINAL_OUTPUT/logs/console.log" 2>/dev/null || true
+    cp "$HOME/extract-photos/logs/$SESSION_NAME.log" "$FINAL_OUTPUT/logs/console.txt" 2>/dev/null || true
 fi
 
 # Write success result (reset trap first to avoid writing "interrupted")

@@ -116,7 +116,7 @@ process alive. Re-running the same epm command detects the existing tmux session
 derived from the video path (`epm-<hash>`). After the extraction finishes, the tmux session waits for Enter so the user
 can see the final output before the session closes. Requires tmux on the remote host (checked during auto-setup).
 Logging: full console output is captured on the remote via tmux `pipe-pane` to `~/extract-photos/logs/{session}.log`
-(auto-cleaned after 30 days), copied to `{output}/logs/console.log`, and also copied to the local repo at
+(auto-cleaned after 30 days), copied to `{output}/logs/console.txt`, and also copied to the local repo at
 `logs/{timestamp}_{video-name}.log` after each run.
 
 ## Output structure
