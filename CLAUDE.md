@@ -80,7 +80,8 @@ Key modules in `extract_photos/`:
   then rejects images with <100 quantized colors at 128x128; skips effectively-grayscale images for the color-count
   stage using mean channel difference < 10). `get_video_metadata()` returns `(fps, duration_sec, width, height)`.
   `transcode_for_playback()` transcodes video to H.264/MP4 for Immich compatibility with a progress bar (or copies if
-  already H.264/HEVC); includes explicit `fsync` after writing to ensure NFS persistence.
+  already H.264/HEVC); includes explicit `fsync` after writing plus verification (existence + non-zero size) to ensure
+  NFS persistence.
   `extract_photos_from_video()` orchestrates all three extraction phases.
 - **transcode_playback.py** - Thin CLI wrapper for `transcode_for_playback()`. Called by `bin/epm` to copy/transcode the
   video with progress display.
@@ -98,8 +99,8 @@ Key modules in `extract_photos/`:
   orders them (video first, photos sorted by timestamp), sets `dateTimeOriginal` on each asset (video gets its YouTube
   upload date via ffprobe or file mtime as fallback; photos get that base date plus their video offset), creates/reuses
   an album named after the video, adds assets in order, optionally shares the album, and optionally sends a Pushover
-  notification. `immich_request()` includes retry logic with exponential backoff (1s, 2s, 4s) for transient connection
-  errors. Log output includes `[HH:MM:SS]` timestamps for debugging. Uses stdlib (`urllib.request`, `urllib.parse`,
+  notification. `immich_request()` includes retry logic with exponential backoff (2s, 4s, 8s, 16s, 32s) for transient
+  connection errors; API calls are paced with brief delays to avoid overloading the server. Log output includes `[HH:MM:SS]` timestamps for debugging. Uses stdlib (`urllib.request`, `urllib.parse`,
   `json`, `subprocess`, `os`, `datetime`) plus ffprobe for metadata. Can be run directly:
   `python extract_photos/immich.py --api-url ... --api-key ... --library-id ... --asset-path ... --video-filename ...`.
 

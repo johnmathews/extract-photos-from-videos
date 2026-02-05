@@ -670,7 +670,14 @@ def transcode_for_playback(video_file: str, output_dir: str) -> str:
         # Explicit fsync to ensure NFS persistence
         with open(dest, "rb") as f:
             os.fsync(f.fileno())
-        print(f"Copied video to {dest}", file=sys.stderr, flush=True)
+        # Verify the output file exists and has non-zero size (important for NFS)
+        if not os.path.exists(dest):
+            raise RuntimeError(f"Copy succeeded but file does not exist: {dest}")
+        file_size = os.path.getsize(dest)
+        if file_size == 0:
+            os.unlink(dest)
+            raise RuntimeError(f"Copy created empty file: {dest}")
+        print(f"Copied video to {dest} ({file_size / 1024 / 1024:.1f} MB)", file=sys.stderr, flush=True)
         return basename
 
     # Need to transcode — get duration for progress tracking

@@ -21,11 +21,12 @@ def log(message: str, end: str = "\n", flush: bool = False) -> None:
 
 
 def immich_request(
-    url: str, api_key: str, method: str = "GET", data: dict | None = None, retries: int = 3
+    url: str, api_key: str, method: str = "GET", data: dict | None = None, retries: int = 5
 ) -> dict | list | None:
     """Make an authenticated request to the Immich API.
 
-    Retries on connection errors (e.g., Immich restarting) with exponential backoff.
+    Retries on connection errors (e.g., Immich restarting/overloaded) with exponential backoff.
+    Uses longer delays (2s, 4s, 8s, 16s, 32s) to give the server time to recover.
     """
     body = json.dumps(data).encode() if data is not None else None
     last_error = None
@@ -35,7 +36,7 @@ def immich_request(
             req.add_header("x-api-key", api_key)
             if body is not None:
                 req.add_header("Content-Type", "application/json")
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=60) as resp:
                 content = resp.read()
                 if not content:
                     return None
@@ -43,7 +44,7 @@ def immich_request(
         except (urllib.error.URLError, ConnectionRefusedError, TimeoutError) as e:
             last_error = e
             if attempt < retries - 1:
-                wait = 2 ** attempt  # 1s, 2s, 4s
+                wait = 2 ** (attempt + 1)  # 2s, 4s, 8s, 16s, 32s
                 print(f"  Connection error, retrying in {wait}s...", file=sys.stderr)
                 time.sleep(wait)
     raise last_error  # type: ignore[misc]
@@ -110,7 +111,7 @@ def poll_for_assets(
         prev_count = len(assets)
         if time.monotonic() >= deadline:
             return assets
-        time.sleep(5)
+        time.sleep(8)  # Longer interval to avoid overloading server during scan
 
 
 def parse_album_name(video_filename: str) -> str:
@@ -327,6 +328,9 @@ def main() -> None:
         log(f"Error: failed to trigger library scan: {e}")
         sys.exit(1)
 
+    # Give Immich time to start processing before polling
+    time.sleep(3)
+
     # 3. Poll for new assets
     expected = (args.photo_count + 1) if args.photo_count else 1
     log("Waiting for assets...     ", end="", flush=True)
@@ -356,7 +360,7 @@ def main() -> None:
     log(f"Video date: {base_date.strftime('%Y-%m-%d')}")
     log("Setting asset dates...    ", end="", flush=True)
     try:
-        for asset in ordered:
+        for i, asset in enumerate(ordered):
             path = asset.get("originalPath", "")
             ts = parse_video_timestamp(path)
             if ts is None:
@@ -367,6 +371,9 @@ def main() -> None:
                 dt = base_date + timedelta(seconds=ts)
             date_str = dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
             update_asset_date(api_url, args.api_key, asset["id"], date_str)
+            # Brief delay between API calls to avoid overloading server
+            if i < len(ordered) - 1:
+                time.sleep(0.5)
         print("done")
     except urllib.error.URLError as e:
         print("failed")
