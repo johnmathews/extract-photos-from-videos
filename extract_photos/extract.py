@@ -667,6 +667,9 @@ def transcode_for_playback(video_file: str, output_dir: str) -> str:
     if re.match(r"^(h264|hevc)$", codec, re.IGNORECASE):
         dest = os.path.join(output_dir, basename)
         shutil.copy2(video_file, dest)
+        # Explicit fsync to ensure NFS persistence
+        with open(dest, "rb") as f:
+            os.fsync(f.fileno())
         print(f"Copied video to {dest}", file=sys.stderr, flush=True)
         return basename
 
@@ -720,6 +723,10 @@ def transcode_for_playback(video_file: str, output_dir: str) -> str:
 
     if proc.returncode != 0:
         raise RuntimeError(f"ffmpeg transcode failed (exit code: {proc.returncode})")
+
+    # Explicit fsync to ensure NFS persistence before verification
+    with open(out_path, "rb") as f:
+        os.fsync(f.fileno())
 
     # Verify the output file exists and has non-zero size (important for NFS)
     if not os.path.exists(out_path):

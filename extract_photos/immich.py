@@ -14,6 +14,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
+def log(message: str, end: str = "\n", flush: bool = False) -> None:
+    """Print a timestamped log message."""
+    ts = datetime.now().strftime("%H:%M:%S")
+    print(f"[{ts}] {message}", end=end, flush=flush)
+
+
 def immich_request(
     url: str, api_key: str, method: str = "GET", data: dict | None = None, retries: int = 3
 ) -> dict | list | None:
@@ -299,50 +305,47 @@ def main() -> None:
     album_name = parse_album_name(args.video_filename)
     notification_parts = []
 
-    print("\n📚 Immich Integration")
+    log("📚 Immich Integration")
 
     # 1. Purge stale assets that may block re-import
     asset_search_path = args.asset_path.rstrip("/") + "/"
-    print("  Purging stale assets...   ", end="", flush=True)
+    log("Purging stale assets...   ", end="", flush=True)
     try:
         purged = purge_existing_assets(api_url, args.api_key, asset_search_path)
         print(f"{purged} removed" if purged else "none found")
     except (urllib.error.URLError, KeyError, TypeError) as e:
         print("failed")
-        print(f"Warning: failed to purge stale assets: {e}", file=sys.stderr)
+        log(f"Warning: failed to purge stale assets: {e}")
 
     # 2. Trigger library scan
-    print("  Scanning library...       ", end="", flush=True)
+    log("Scanning library...       ", end="", flush=True)
     try:
         trigger_scan(api_url, args.api_key, args.library_id)
         print("done")
     except urllib.error.URLError as e:
         print("failed")
-        print(f"Error: failed to trigger library scan: {e}", file=sys.stderr)
+        log(f"Error: failed to trigger library scan: {e}")
         sys.exit(1)
 
     # 3. Poll for new assets
     expected = (args.photo_count + 1) if args.photo_count else 1
-    print("  Waiting for assets...     ", end="", flush=True)
+    log("Waiting for assets...     ", end="", flush=True)
     assets = poll_for_assets(
         api_url, args.api_key, asset_search_path, expected_count=expected
     )
     if not assets:
         print("none found")
-        print(
-            "Warning: no assets found after waiting — album creation skipped",
-            file=sys.stderr,
-        )
+        log("Warning: no assets found after waiting — album creation skipped")
         sys.exit(0)
     print(f"{len(assets)} found")
     if args.photo_count and len(assets) < expected:
-        print(
-            f"  Warning: expected {expected} assets, found {len(assets)}"
+        log(
+            f"Warning: expected {expected} assets, found {len(assets)}"
             " (library scan may still be running)"
         )
 
     # 4. Order assets: video first, photos by timestamp
-    print("  Ordering assets...        ", end="", flush=True)
+    log("Ordering assets...        ", end="", flush=True)
     ordered = order_assets(assets)
     asset_ids = [a["id"] for a in ordered]
     print("done")
@@ -350,8 +353,8 @@ def main() -> None:
     # 5. Set dateTimeOriginal so Immich sorts by video timeline
     video_path = os.path.join(args.asset_path, args.video_filename)
     base_date = get_video_date(video_path)
-    print(f"  Video date: {base_date.strftime('%Y-%m-%d')}")
-    print("  Setting asset dates...    ", end="", flush=True)
+    log(f"Video date: {base_date.strftime('%Y-%m-%d')}")
+    log("Setting asset dates...    ", end="", flush=True)
     try:
         for asset in ordered:
             path = asset.get("originalPath", "")
@@ -367,11 +370,11 @@ def main() -> None:
         print("done")
     except urllib.error.URLError as e:
         print("failed")
-        print(f"Warning: failed to set asset dates: {e}", file=sys.stderr)
+        log(f"Warning: failed to set asset dates: {e}")
 
     # 6. Create or find album, set sort order to oldest first
-    print(f"  Album: {album_name}")
-    print("  Creating album...         ", end="", flush=True)
+    log(f"Album: {album_name}")
+    log("Creating album...         ", end="", flush=True)
     try:
         album_id = find_or_create_album(api_url, args.api_key, album_name)
         # Set album sort to oldest first so video appears first, photos in order
@@ -384,11 +387,11 @@ def main() -> None:
         print("done")
     except urllib.error.URLError as e:
         print("failed")
-        print(f"Error: failed to create/find album: {e}", file=sys.stderr)
+        log(f"Error: failed to create/find album: {e}")
         sys.exit(1)
 
     # 7. Add assets to album
-    print(f"  Adding {len(asset_ids)} asset(s)...     ", end="", flush=True)
+    log(f"Adding {len(asset_ids)} asset(s)...     ", end="", flush=True)
     try:
         results = add_assets_to_album(api_url, args.api_key, album_id, asset_ids)
         added = sum(1 for r in results if r.get("success"))
@@ -401,7 +404,7 @@ def main() -> None:
             # Retry after a brief delay — assets may still be processing
             time.sleep(5)
             failed_ids = [r["id"] for r in failed]
-            print(f"  Retrying {len(failed_ids)} asset(s)... ", end="", flush=True)
+            log(f"Retrying {len(failed_ids)} asset(s)... ", end="", flush=True)
             retry = add_assets_to_album(api_url, args.api_key, album_id, failed_ids)
             retry_ok = sum(1 for r in retry if r.get("success"))
             added += retry_ok
@@ -411,7 +414,7 @@ def main() -> None:
                 errors = {
                     r.get("error", "unknown") for r in retry if not r.get("success")
                 }
-                print(f"  Failure reasons: {', '.join(errors)}", file=sys.stderr)
+                log(f"Failure reasons: {', '.join(errors)}")
             else:
                 print(f"all {retry_ok} added")
         else:
@@ -422,14 +425,14 @@ def main() -> None:
         notification_parts.append(f"{added + dupes} assets in album")
     except urllib.error.URLError as e:
         print("failed")
-        print(f"Error: failed to add assets to album: {e}", file=sys.stderr)
+        log(f"Error: failed to add assets to album: {e}")
         sys.exit(1)
 
     # 8. Share album if user specified
     if not args.share_user:
-        print("  Sharing...                not configured (IMMICH_SHARE_USER not set)")
+        log("Sharing...                not configured (IMMICH_SHARE_USER not set)")
     else:
-        print(f"  Sharing with {args.share_user}...      ", end="", flush=True)
+        log(f"Sharing with {args.share_user}...      ", end="", flush=True)
         try:
             user_id = find_user(api_url, args.api_key, args.share_user)
             if user_id:
@@ -438,23 +441,20 @@ def main() -> None:
                 notification_parts.append(f"shared with {args.share_user}")
             else:
                 print("user not found")
-                print(
-                    f"Warning: user '{args.share_user}' not found — album not shared",
-                    file=sys.stderr,
-                )
+                log(f"Warning: user '{args.share_user}' not found — album not shared")
         except urllib.error.HTTPError as e:
             if e.code == 400:
                 print("already shared")
             else:
                 print("failed")
-                print(f"Error: failed to share album: {e}", file=sys.stderr)
+                log(f"Error: failed to share album: {e}")
         except urllib.error.URLError as e:
             print("failed")
-            print(f"Error: failed to share album: {e}", file=sys.stderr)
+            log(f"Error: failed to share album: {e}")
 
     # 9. Send Pushover notification if configured
     if args.pushover_user_key and args.pushover_app_token:
-        print("  Sending notification...   ", end="", flush=True)
+        log("Sending notification...   ", end="", flush=True)
         try:
             lines = []
             if args.photo_count is not None:
@@ -469,7 +469,7 @@ def main() -> None:
             print("done")
         except urllib.error.URLError as e:
             print("failed")
-            print(f"Error: failed to send notification: {e}", file=sys.stderr)
+            log(f"Error: failed to send notification: {e}")
 
 
 if __name__ == "__main__":
