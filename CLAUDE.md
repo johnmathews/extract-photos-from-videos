@@ -125,9 +125,11 @@ tests auto-discover all `test-video-*` directories and run parametrized across t
 the target: `immich_lxc` (default, SSH host `immich`) or `media_vm` (SSH host `media`). Auto-installs repo/deps on first
 run and auto-updates (`git pull` + `uv sync`) on subsequent runs. Arguments with special shell characters (e.g. `[]` in
 filenames) must be quoted. Computes the sanitized output subdirectory name early (via `make_safe_folder_name`) and prompts
-skip-or-overwrite if it already contains extracted photos. On overwrite, deletes the output directory and triggers an
-Immich library scan immediately (so Immich detects the removed files before new files are copied to the same paths);
-the Immich Integration phase triggers a second scan after new files are in place.
+skip-or-overwrite if it already contains extracted photos. On overwrite, deletion of old files is deferred until after
+extraction succeeds — old output is preserved as a safety net if extraction fails or finds no photos. Just before
+copying new files, the old output directory is removed and an Immich library scan is triggered (so Immich detects the
+removed files before new files are copied to the same paths); the Immich Integration phase triggers a second scan after
+new files are in place.
 Creates a temp dir with a symlink to bridge single-file input
 to the tool's directory-based interface. After extraction, copies photos to NFS via `copy_to_nfs.py` (with fsync +
 verification for reliability), then calls `immich.py` to scan the library, create an album, and optionally share it

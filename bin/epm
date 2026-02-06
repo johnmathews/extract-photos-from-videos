@@ -333,26 +333,20 @@ trigger_scan(sys.argv[1], sys.argv[2], sys.argv[3])
     fi
 }
 
+OVERWRITE=false
+
 if $HAS_JPG && $HAS_VID; then
     echo "Output already exists: $FINAL_OUTPUT"
     read -p "(s)kip or (o)verwrite? [s/o]: " CHOICE
     case "$CHOICE" in
-        o|O)
-            echo "Removing old output..."
-            rm -rf "$FINAL_OUTPUT"
-            trigger_immich_scan
-            ;;
+        o|O) OVERWRITE=true ;;
         *) echo "Skipping."; write_result 0 0 skipped; exit 0 ;;
     esac
 elif $HAS_JPG; then
     echo "Incomplete output found (photos but no video): $FINAL_OUTPUT"
     read -p "(s)kip or (o)verwrite? [s/o]: " CHOICE
     case "$CHOICE" in
-        o|O)
-            echo "Removing old output..."
-            rm -rf "$FINAL_OUTPUT"
-            trigger_immich_scan
-            ;;
+        o|O) OVERWRITE=true ;;
         *) echo "Skipping."; write_result 0 0 skipped; exit 0 ;;
     esac
 fi
@@ -382,6 +376,14 @@ if [ "$PHOTO_COUNT" -eq 0 ]; then
     echo "No photos extracted."
     write_result 0 0 no_photos
     exit 0
+fi
+
+# Remove old output just before copying new files (deferred from overwrite prompt
+# so that old files are preserved if extraction fails)
+if $OVERWRITE; then
+    echo "Removing old output..."
+    rm -rf "$FINAL_OUTPUT"
+    trigger_immich_scan
 fi
 
 # Copy extracted photos (files only, skip logs/ subdirectory) to
