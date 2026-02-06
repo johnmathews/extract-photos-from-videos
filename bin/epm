@@ -322,6 +322,17 @@ if [ -d "$FINAL_OUTPUT" ]; then
     done
 fi
 
+trigger_immich_scan() {
+    # Trigger an Immich library scan so it detects file changes
+    if [ -n "${IMMICH_API_URL:-}" ] && [ -n "${IMMICH_API_KEY:-}" ] && [ -n "${IMMICH_LIBRARY_ID:-}" ]; then
+        python -c "
+import sys
+from extract_photos.immich import trigger_scan
+trigger_scan(sys.argv[1], sys.argv[2], sys.argv[3])
+" "$IMMICH_API_URL" "$IMMICH_API_KEY" "$IMMICH_LIBRARY_ID" 2>/dev/null || true
+    fi
+}
+
 if $HAS_JPG && $HAS_VID; then
     echo "Output already exists: $FINAL_OUTPUT"
     read -p "(s)kip or (o)verwrite? [s/o]: " CHOICE
@@ -329,6 +340,7 @@ if $HAS_JPG && $HAS_VID; then
         o|O)
             echo "Removing old output..."
             rm -rf "$FINAL_OUTPUT"
+            trigger_immich_scan
             ;;
         *) echo "Skipping."; write_result 0 0 skipped; exit 0 ;;
     esac
@@ -339,6 +351,7 @@ elif $HAS_JPG; then
         o|O)
             echo "Removing old output..."
             rm -rf "$FINAL_OUTPUT"
+            trigger_immich_scan
             ;;
         *) echo "Skipping."; write_result 0 0 skipped; exit 0 ;;
     esac

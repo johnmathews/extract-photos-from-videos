@@ -120,6 +120,35 @@ class TestImmichRequest:
         assert req.get_header("Content-type") is None
 
 
+    @patch("extract_photos.immich.urllib.request.urlopen")
+    def test_http_error_not_retried(self, mock_urlopen):
+        """HTTP errors (4xx/5xx) should be raised immediately, not retried."""
+        import urllib.error
+
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            "http://immich/api/test", 400, "Bad Request", {}, None
+        )
+        try:
+            immich_request("http://immich/api/test", "key")
+            assert False, "Expected HTTPError"
+        except urllib.error.HTTPError:
+            pass
+        assert mock_urlopen.call_count == 1  # No retries
+
+    @patch("extract_photos.immich.time.sleep")
+    @patch("extract_photos.immich.urllib.request.urlopen")
+    def test_connection_error_retried(self, mock_urlopen, mock_sleep):
+        """Connection errors should be retried with backoff."""
+        import urllib.error
+
+        mock_urlopen.side_effect = urllib.error.URLError("connection refused")
+        try:
+            immich_request("http://immich/api/test", "key", retries=3)
+        except urllib.error.URLError:
+            pass
+        assert mock_urlopen.call_count == 3  # All retries attempted
+
+
 class TestTriggerScan:
     @patch("extract_photos.immich.immich_request")
     def test_calls_correct_endpoint(self, mock_req):
@@ -162,6 +191,24 @@ class TestPurgeExistingAssets:
             method="POST",
             data={"originalPath": "/photos/subdir/", "withDeleted": True},
         )
+
+
+    @patch("extract_photos.immich.immich_request")
+    def test_handles_http_error_on_delete(self, mock_req):
+        """HTTP error from DELETE should warn and stop, not crash."""
+        import urllib.error
+
+        error = urllib.error.HTTPError(
+            "http://immich/api/assets", 400, "Bad Request", {},
+            MagicMock(read=MagicMock(return_value=b'{"message":"Not found or no asset.delete access"}'))
+        )
+        error.read = MagicMock(return_value=b'{"message":"Not found or no asset.delete access"}')
+        mock_req.side_effect = [
+            {"assets": {"items": [{"id": "a1"}, {"id": "a2"}]}},
+            error,
+        ]
+        result = purge_existing_assets("http://immich", "key", "/photos/subdir/")
+        assert result == 0  # Nothing counted as purged since DELETE failed
 
 
 class TestPollForAssets:
@@ -854,4 +901,83 @@ class TestMain:
         assert "Creating album..." in output
         assert "Adding 2 asset(s)..." in output
         assert "Sharing with john..." in output
+
+    def test_share_already_added_prints_message(self, capsys):
+        """When Immich returns 400 'User already added', should print 'already shared'."""
+        import io
+        import urllib.error
+
+        from extract_photos.immich import main
+
+        error_body = b'{"message":"User already added","error":"Bad Request","statusCode":400}'
+        http_error = urllib.error.HTTPError(
+            "http://immich/api/albums/album-1/users", 400, "Bad Request", {},
+            io.BytesIO(error_body),
+        )
+
+        add_result = [{"id": "a1", "success": True}]
+        args = [
+            "--api-url", "http://immich",
+            "--api-key", "key",
+            "--library-id", "lib-1",
+            "--asset-path", "/photos/subdir",
+            "--video-filename", "Author-Title-[id].mkv",
+            "--share-user", "john",
+        ]
+        with (
+            patch("sys.argv", ["immich.py"] + args),
+            patch("extract_photos.immich.trigger_scan"),
+            patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}]),
+            patch("extract_photos.immich.find_or_create_album", return_value="album-1"),
+            patch("extract_photos.immich.add_assets_to_album", return_value=add_result),
+            patch("extract_photos.immich.find_user", return_value="user-42"),
+            patch("extract_photos.immich.share_album", side_effect=http_error),
+            patch("extract_photos.immich.get_video_date", return_value=datetime(2000, 1, 1, tzinfo=timezone.utc)),
+            patch("extract_photos.immich.update_asset_date"),
+            patch("extract_photos.immich.immich_request"),
+        ):
+            main()
+
+        output = capsys.readouterr().out
+        assert "already shared" in output
+
+    def test_share_other_400_prints_error(self, capsys):
+        """When Immich returns 400 without 'already added', should print error details."""
+        import io
+        import urllib.error
+
+        from extract_photos.immich import main
+
+        error_body = b'{"message":"Invalid user ID","error":"Bad Request","statusCode":400}'
+        http_error = urllib.error.HTTPError(
+            "http://immich/api/albums/album-1/users", 400, "Bad Request", {},
+            io.BytesIO(error_body),
+        )
+
+        add_result = [{"id": "a1", "success": True}]
+        args = [
+            "--api-url", "http://immich",
+            "--api-key", "key",
+            "--library-id", "lib-1",
+            "--asset-path", "/photos/subdir",
+            "--video-filename", "Author-Title-[id].mkv",
+            "--share-user", "john",
+        ]
+        with (
+            patch("sys.argv", ["immich.py"] + args),
+            patch("extract_photos.immich.trigger_scan"),
+            patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}]),
+            patch("extract_photos.immich.find_or_create_album", return_value="album-1"),
+            patch("extract_photos.immich.add_assets_to_album", return_value=add_result),
+            patch("extract_photos.immich.find_user", return_value="user-42"),
+            patch("extract_photos.immich.share_album", side_effect=http_error),
+            patch("extract_photos.immich.get_video_date", return_value=datetime(2000, 1, 1, tzinfo=timezone.utc)),
+            patch("extract_photos.immich.update_asset_date"),
+            patch("extract_photos.immich.immich_request"),
+        ):
+            main()
+
+        output = capsys.readouterr().out
+        assert "failed" in output
+        assert "Invalid user ID" in output
 
