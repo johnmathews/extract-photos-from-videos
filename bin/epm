@@ -57,13 +57,9 @@ RUN_TIMESTAMP="$(date '+%Y-%m-%d_%H%M%S')"
 copy_remote_log() {
     # Copy remote console log to local logs directory
     mkdir -p "$LOCAL_LOGS_DIR"
-    local video_basename
-    video_basename="$(basename "$VIDEO")"
-    # Remove extension and sanitize for filename
-    video_basename="${video_basename%.*}"
-    video_basename="$(echo "$video_basename" | tr -cd '[:alnum:]_-')"
-    local local_log="$LOCAL_LOGS_DIR/${RUN_TIMESTAMP}_${video_basename}.log"
-    scp -q "$SSH_HOST:~/extract-photos/logs/$SESSION_NAME.log" "$local_log" 2>/dev/null || true
+    local local_log="$LOCAL_LOGS_DIR/${RUN_TIMESTAMP}_${VIDEO_NAME_SAFE}.log"
+    local remote_log="~/extract-photos/logs/$VIDEO_NAME_SAFE/${RUN_TIMESTAMP}_console.log"
+    scp -q "$SSH_HOST:$remote_log" "$local_log" 2>/dev/null || true
     if [ -f "$local_log" ]; then
         echo "Log saved to: $local_log"
     fi
@@ -158,6 +154,11 @@ if [[ -z "$VIDEO" ]]; then
   exit 1
 fi
 
+# Human-readable video name for log directories (computed early for use throughout)
+VIDEO_BASENAME="$(basename "$VIDEO")"
+VIDEO_BASENAME="${VIDEO_BASENAME%.*}"
+VIDEO_NAME_SAFE=$(echo "$VIDEO_BASENAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]_-')
+
 # --- Banner ---
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "📸 Extracting photos from video (on $HOST_LABEL)"
@@ -235,7 +236,9 @@ VIDEO="$1"
 OUTPUT="$2"
 UPDATE_IMMICH="$3"
 SESSION_NAME="$4"
-shift 4
+RUN_TIMESTAMP="$5"
+VIDEO_NAME_SAFE="$6"
+shift 6
 
 # Remaining args are extra flags for main.py
 EXTRA=("$@")
@@ -246,8 +249,15 @@ write_result() {
     printf '%s\n%s\n%s\n' "$1" "$2" "$3" > "$RESULT_FILE"
 }
 
-# Clean up old console logs (>30 days)
-find ~/extract-photos/logs -name "epm-*.log" -mtime +30 -delete 2>/dev/null || true
+# Remove legacy log directory if it exists
+[ -d ~/epm-logs ] && rm -rf ~/epm-logs
+
+# Clean up old logs (>30 days)
+find ~/extract-photos/logs -name "*_console.log" -mtime +30 -delete 2>/dev/null || true
+find ~/extract-photos/logs -name "*_extraction.log" -mtime +30 -delete 2>/dev/null || true
+# Clean up old hash-based logs from previous format
+find ~/extract-photos/logs -maxdepth 1 -name "epm-*.log" -mtime +30 -delete 2>/dev/null || true
+find ~/extract-photos/logs -type d -empty -delete 2>/dev/null || true
 
 REPO_DIR="$HOME/extract-photos"
 
@@ -370,11 +380,11 @@ else
     fi
 fi
 
-# Copy console log alongside the extraction output (timestamped to preserve multiple runs)
-if [ -f "$HOME/extract-photos/logs/$SESSION_NAME.log" ] && [ -d "${FINAL_OUTPUT:-}" ]; then
+# Copy console log alongside the extraction output
+REMOTE_LOG_FILE="$HOME/extract-photos/logs/$VIDEO_NAME_SAFE/${RUN_TIMESTAMP}_console.log"
+if [ -f "$REMOTE_LOG_FILE" ] && [ -d "${FINAL_OUTPUT:-}" ]; then
     mkdir -p "$FINAL_OUTPUT/logs"
-    LOG_TIMESTAMP="$(date '+%Y-%m-%d_%H%M%S')"
-    cp "$HOME/extract-photos/logs/$SESSION_NAME.log" "$FINAL_OUTPUT/logs/${LOG_TIMESTAMP}.txt" 2>/dev/null || true
+    cp "$REMOTE_LOG_FILE" "$FINAL_OUTPUT/logs/${RUN_TIMESTAMP}_console.log" 2>/dev/null || true
 fi
 
 # Write success result (reset trap first to avoid writing "interrupted")
@@ -386,10 +396,10 @@ EXTRACTION
 # If the connection is lost (e.g. laptop lid close), tmux keeps the process
 # alive. Re-running the same epm command reattaches to the running session.
 ssh "$SSH_HOST" "tmux new-session -d -s $SESSION_NAME \
-    \"trap 'rm -f $REMOTE_SCRIPT' EXIT; bash -l $REMOTE_SCRIPT $(printf '%q ' "$VIDEO" "$OUTPUT" "$UPDATE_IMMICH" "$SESSION_NAME" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"); stty sane; echo; echo 'Press Enter to close.'; read\""
+    \"trap 'rm -f $REMOTE_SCRIPT' EXIT; bash -l $REMOTE_SCRIPT $(printf '%q ' "$VIDEO" "$OUTPUT" "$UPDATE_IMMICH" "$SESSION_NAME" "$RUN_TIMESTAMP" "$VIDEO_NAME_SAFE" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"); stty sane; echo; echo 'Press Enter to close.'; read\""
 
 # Capture all console output to a log file on the remote host
-ssh "$SSH_HOST" "mkdir -p ~/extract-photos/logs && tmux pipe-pane -t $SESSION_NAME 'cat >> ~/extract-photos/logs/$SESSION_NAME.log'"
+ssh "$SSH_HOST" "mkdir -p ~/extract-photos/logs/$VIDEO_NAME_SAFE && tmux pipe-pane -t $SESSION_NAME 'cat >> ~/extract-photos/logs/$VIDEO_NAME_SAFE/${RUN_TIMESTAMP}_console.log'"
 
 ssh -tt "$SSH_HOST" "tmux attach-session -t $SESSION_NAME" </dev/tty
 

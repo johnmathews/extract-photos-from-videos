@@ -120,10 +120,30 @@ a tmux session on the remote host for resilience: if the SSH connection drops (e
 process alive. Re-running the same epm command detects the existing tmux session and reattaches. The session name is
 derived from the video path (`epm-<hash>`). After the extraction finishes, the tmux session waits for Enter so the user
 can see the final output before the session closes. Requires tmux on the remote host (checked during auto-setup).
-Logging: full console output is captured on the remote via tmux `pipe-pane` to `~/extract-photos/logs/{session}.log`
-(auto-cleaned after 30 days), copied to `{output}/logs/{timestamp}.txt`, and also copied to the local repo at
-`logs/{timestamp}_{video-name}.log` after each run. The script resolves symlinks to find the actual repo location,
-so it works correctly when symlinked from `/usr/local/bin/epm`.
+The script resolves symlinks to find the actual repo location, so it works correctly when symlinked from `/usr/local/bin/epm`.
+
+## Logging structure
+
+Logs are organized by video name with timestamps to preserve multiple runs:
+
+```
+Remote host:
+~/extract-photos/logs/
+  {video_name}/
+    {timestamp}_console.log       # Console output (tmux pipe-pane)
+
+Output directory (NFS):
+{output}/{video_name}/
+  logs/
+    {timestamp}_{video_name}_extraction.log   # Python extraction log
+    {timestamp}_console.log                   # Copy of console log
+
+Local repo:
+{repo}/logs/
+  {timestamp}_{video_name}.log    # Console log copy
+```
+
+Logs older than 30 days are auto-cleaned on each run. Legacy `~/epm-logs/` directory is automatically removed.
 
 ## Output structure
 

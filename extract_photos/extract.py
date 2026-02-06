@@ -761,11 +761,14 @@ def extract_photos_from_video(
     """
     os.makedirs(output_folder, exist_ok=True)
 
-    # Set up logging
+    # Set up logging (timestamped to preserve multiple runs)
+    from datetime import datetime
+
     filename_safe = make_safe_folder_name(os.path.splitext(filename)[0])
     log_dir = os.path.join(output_folder, "logs")
     os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, f"{filename_safe}.log")
+    log_timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    log_file = os.path.join(log_dir, f"{log_timestamp}_{filename_safe}_extraction.log")
     logger = setup_logger(log_file)
 
     # Get video metadata via ffprobe (works with any codec including AV1)
