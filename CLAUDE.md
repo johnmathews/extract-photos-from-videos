@@ -100,7 +100,8 @@ Key modules in `extract_photos/`:
 - **display_progress.py** - `format_time()`, `build_progress_bar()`, and `print_scan_progress()` for 3-line in-place
   terminal progress.
 - **immich.py** - Standalone Immich integration script called by `bin/epm` after extraction. `purge_existing_assets()`
-  is a utility function (paginated: loops until all result pages are purged) used by `epm` to clear stale Immich records
+  is a utility function (paginated: loops until all result pages are purged; gracefully handles HTTP errors from DELETE
+  with a warning) used by `epm` to clear stale Immich records
   before file operations; the `main()` CLI flow itself does not purge (epm handles purge timing). Triggers a library
   scan, polls for new assets (with early exit when poll count stabilises at zero),
   orders them (video first, photos sorted by timestamp), sets `dateTimeOriginal` on each asset (video gets its YouTube

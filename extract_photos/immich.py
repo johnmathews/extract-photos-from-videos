@@ -74,7 +74,12 @@ def purge_existing_assets(api_url: str, api_key: str, asset_path: str) -> int:
         if not assets:
             break
         ids = [a["id"] for a in assets]
-        immich_request(f"{api_url}/api/assets", api_key, method="DELETE", data={"ids": ids, "force": True})
+        try:
+            immich_request(f"{api_url}/api/assets", api_key, method="DELETE", data={"ids": ids, "force": True})
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            print(f"  Warning: purge DELETE failed (HTTP {e.code}): {body}", file=sys.stderr)
+            break
         total_purged += len(ids)
     return total_purged
 
@@ -449,7 +454,7 @@ def main() -> None:
                 log(f"Warning: user '{args.share_user}' not found — album not shared")
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")
-            if e.code == 400 and "is already shared" in body.lower():
+            if e.code == 400 and "already added" in body.lower():
                 print("already shared")
             else:
                 print("failed")
