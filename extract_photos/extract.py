@@ -441,6 +441,8 @@ def scan_for_photos(
 
     photo_timestamps: list[tuple[float, str]] = []
     prev_photo_hash: np.ndarray | None = None  # for dedup across consecutive segments
+    nonstatic_run: int = 0  # consecutive non-static frames before current segment
+    gap_before_segment: int = 0  # nonstatic_run when current segment started
     last_progress_time = 0.0
     wall_start = time.monotonic()
 
@@ -449,7 +451,9 @@ def scan_for_photos(
     print()
     print()
 
-    def _try_confirm_segment(seg_start_ts: float, seg_end_ts: float, seg_frame: np.ndarray) -> None:
+    def _try_confirm_segment(
+        seg_start_ts: float, seg_end_ts: float, seg_frame: np.ndarray, gap_frames: int,
+    ) -> None:
         """Check if a completed static segment is a photo and record it."""
         nonlocal prev_photo_hash
         seg_duration = seg_end_ts - seg_start_ts
@@ -464,11 +468,15 @@ def scan_for_photos(
             detect_letterbox=detect_letterbox,
         ):
             return
-        # Dedup against previous confirmed photo (catches encoding glitches
-        # that split one photo into two adjacent static segments)
+        # Dedup against previous confirmed photo.  Use a tight threshold for
+        # short gaps (1 non-static frame = codec keyframe artifact splitting
+        # one photo into two segments) and a wider threshold after real
+        # non-static content (2+ frames = genuine scene change).
         seg_hash = compute_frame_hash(seg_frame)
-        if prev_photo_hash is not None and hash_difference(seg_hash, prev_photo_hash) <= HASH_DIFF_THRESHOLD:
-            return
+        if prev_photo_hash is not None:
+            threshold = HASH_STEP_THRESHOLD if gap_frames <= 1 else HASH_DIFF_THRESHOLD
+            if hash_difference(seg_hash, prev_photo_hash) <= threshold:
+                return
         photo_timestamps.append((seg_start_ts, _format_scan_timestamp(seg_start_ts)))
         prev_photo_hash = seg_hash
 
@@ -496,14 +504,20 @@ def scan_for_photos(
                 # Start of new static segment (began at the previous frame)
                 segment_start_ts = prev_ts
                 segment_frame = prev_frame
+                gap_before_segment = nonstatic_run
+            nonstatic_run = 0
         else:
             # End of static segment (if any)
             if segment_frame is not None:
-                _try_confirm_segment(segment_start_ts, prev_ts, segment_frame)
+                _try_confirm_segment(segment_start_ts, prev_ts, segment_frame, gap_before_segment)
                 segment_frame = None
-            # Reset dedup hash during non-static content so the next static
-            # segment is always treated as a fresh detection
-            prev_photo_hash = None
+            nonstatic_run += 1
+            # Reset dedup hash after sustained non-static content so the next
+            # static segment is treated as a fresh detection.  A single
+            # non-static frame (codec keyframe artifact) preserves the hash
+            # so back-to-back segments of the same photo are still deduped.
+            if nonstatic_run >= 2:
+                prev_photo_hash = None
 
         prev_gray = gray
         prev_frame = frame
@@ -533,7 +547,7 @@ def scan_for_photos(
 
     # Flush last segment (video may end during a static segment)
     if segment_frame is not None:
-        _try_confirm_segment(segment_start_ts, prev_ts, segment_frame)
+        _try_confirm_segment(segment_start_ts, prev_ts, segment_frame, gap_before_segment)
 
     cap.release()
 

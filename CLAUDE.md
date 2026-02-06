@@ -57,9 +57,12 @@ Each video goes through three phases:
    are discarded. Each surviving segment is then tested for uniform borders via `detect_almost_uniform_borders()`
    (supports three independently-toggleable patterns: all-4-borders uniform, pillarbox left+right borders, letterbox
    top+bottom borders — each pattern detects both black and white borders). Near-uniform frames (black/white screens)
-   are rejected, and perceptual hashing deduplicates photos (step-to-step threshold 3 for back-to-back transitions,
-   first-detection threshold 10 for photos separated by non-photo content). Hash state resets during non-static content
-   to avoid false dedup of genuinely different photos. Collects timestamps of unique photos.
+   are rejected, and perceptual hashing deduplicates photos using two thresholds: tight (`HASH_STEP_THRESHOLD` 3) for
+   segments separated by a single non-static frame (codec keyframe artifacts that split one photo into two segments),
+   and wider (`HASH_DIFF_THRESHOLD` 10) for segments separated by sustained non-static content. Hash state resets after
+   2+ consecutive non-static frames to avoid false dedup of genuinely different photos; a single non-static frame
+   (common at H.264 keyframe boundaries in long photos) preserves the hash so the same photo isn't extracted twice.
+   Collects timestamps of unique photos.
 3. **Extract** — Opens the original full-res video, seeks to each discovered timestamp, runs border trimming and
    validation (minimum area as % of frame, near-uniform, screenshot detection), saves as JPEG.
 
