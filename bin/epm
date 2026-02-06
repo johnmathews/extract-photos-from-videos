@@ -24,6 +24,10 @@ Options:
   step_time=SECONDS        Time between sampled frames (default: 0.5)
   border_px=INT            Border size in pixels around extracted photos (default: 5)
   min_photo_pct=INT        Minimum photo area as % of video frame area (default: 25)
+  min_photo_duration=FLOAT Minimum seconds a photo must persist on screen (default: 0.5)
+  detect_all_borders=BOOL  Enable all-4-borders detection pattern (default: true)
+  detect_pillarbox=BOOL    Enable pillarbox detection pattern (default: true)
+  detect_letterbox=BOOL    Enable letterbox detection pattern (default: true)
   include_text=BOOL        Include text/annotations next to photos (default: false)
   update_immich=BOOL       Run Immich integration after extraction (default: true)
   help                     Show this help message
@@ -104,6 +108,33 @@ for arg in "$@"; do
     ;;
   min_photo_pct=*)
     EXTRA_ARGS+=("--min-photo-pct" "${arg#min_photo_pct=}")
+    ;;
+  min_photo_duration=*)
+    EXTRA_ARGS+=("--min-photo-duration" "${arg#min_photo_duration=}")
+    ;;
+  detect_all_borders=*)
+    val="${arg#detect_all_borders=}"
+    if [ "$val" = "true" ]; then
+      EXTRA_ARGS+=("--detect-all-borders")
+    else
+      EXTRA_ARGS+=("--no-detect-all-borders")
+    fi
+    ;;
+  detect_pillarbox=*)
+    val="${arg#detect_pillarbox=}"
+    if [ "$val" = "true" ]; then
+      EXTRA_ARGS+=("--detect-pillarbox")
+    else
+      EXTRA_ARGS+=("--no-detect-pillarbox")
+    fi
+    ;;
+  detect_letterbox=*)
+    val="${arg#detect_letterbox=}"
+    if [ "$val" = "true" ]; then
+      EXTRA_ARGS+=("--detect-letterbox")
+    else
+      EXTRA_ARGS+=("--no-detect-letterbox")
+    fi
     ;;
   include_text=*)
     val="${arg#include_text=}"

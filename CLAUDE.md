@@ -29,7 +29,7 @@ uv run pyright
 # Run Python tests (fast unit tests only)
 uv run pytest tests/
 
-# Run slow integration tests (requires test video in test-videos/test-video-1/)
+# Run slow integration tests (requires test videos in test-videos/test-video-*/)
 uv run pytest tests/test_video_integration.py -m slow
 
 # Run shell tests for bin/epm
@@ -51,19 +51,24 @@ Each video goes through three phases:
 
 1. **Transcode** — ffmpeg creates a 320px-wide low-res temp copy (no audio). Always uses software encoding (VAAPI
    overhead exceeds savings at 320px).
-2. **Scan** — Single-threaded scan of the low-res copy. Steps through frames at `step_time` intervals, detects uniform
-   borders via `detect_almost_uniform_borders()` (supports three patterns: all-4-borders uniform for white-bordered
-   photos, pillarbox for black side borders, letterbox for black top/bottom borders), rejects near-uniform frames
-   (black/white screens), deduplicates via perceptual hashing. Uses both step-to-step comparison (threshold 3, detects
-   back-to-back photo transitions) and first-detection comparison (threshold 10, detects photos separated by non-photo
-   content). Resets hash state when transitioning from photo to non-photo frames. Collects timestamps of unique photos.
+2. **Scan** — Static-first architecture: single-threaded scan of the low-res copy steps through frames at `step_time`
+   intervals and first identifies **static segments** — contiguous runs where consecutive frames are pixel-identical
+   (Mean Absolute Difference < 0.5, `STATIC_MAD_THRESHOLD`). Segments shorter than `min_photo_duration` (default 0.5s)
+   are discarded. Each surviving segment is then tested for uniform borders via `detect_almost_uniform_borders()`
+   (supports three independently-toggleable patterns: all-4-borders uniform, pillarbox left+right borders, letterbox
+   top+bottom borders — each pattern detects both black and white borders). Near-uniform frames (black/white screens)
+   are rejected, and perceptual hashing deduplicates photos (step-to-step threshold 3 for back-to-back transitions,
+   first-detection threshold 10 for photos separated by non-photo content). Hash state resets during non-static content
+   to avoid false dedup of genuinely different photos. Collects timestamps of unique photos.
 3. **Extract** — Opens the original full-res video, seeks to each discovered timestamp, runs border trimming and
    validation (minimum area as % of frame, near-uniform, screenshot detection), saves as JPEG.
 
 Key modules in `extract_photos/`:
 
 - **main.py** - Entry point. Parses args (`input_directory`, `-o`, `-s`, `-b`, `--min-photo-pct`,
-  `--include-text`/`--no-include-text`), creates output dir, calls batch processor.
+  `--include-text`/`--no-include-text`, `--min-photo-duration`, `--detect-all-borders`/`--no-detect-all-borders`,
+  `--detect-pillarbox`/`--no-detect-pillarbox`, `--detect-letterbox`/`--no-detect-letterbox`), creates output dir,
+  calls batch processor.
 - **batch_processor.py** - Scans directory for video files (.mp4/.mkv/.avi/.mov/.webm), creates per-video output
   subdirectories, calls extractor for each. Prompts skip-or-overwrite when a video's output directory already contains
   extracted photos (detected by presence of both `.jpg` and video files).
@@ -71,8 +76,9 @@ Key modules in `extract_photos/`:
   `/dev/dri/renderD128` then runs a minimal ffmpeg probe; cached per process). `_lowres_encode_args()` always returns
   software encoding arguments (VAAPI `hwupload` overhead exceeds savings at 320px on shared-memory iGPUs).
   `_playback_encode_args()` returns VAAPI or software arguments depending on availability.
-  `transcode_lowres()` creates the low-res temp file via ffmpeg. `scan_for_photos()` scans it single-threaded with
-  progress display, rejecting near-uniform frames (black/white screens) before hashing.
+  `transcode_lowres()` creates the low-res temp file via ffmpeg. `scan_for_photos()` implements the static-first scan:
+  tracks pixel-level MAD between consecutive frames to find static segments, filters by minimum duration, then applies
+  border detection and hash dedup to candidates. `STATIC_MAD_THRESHOLD = 0.5` defines pixel-identity.
   `extract_fullres_frames()` seeks to each timestamp in the original video. `_rejection_reason()` validates extracted
   frames: checks minimum area (as % of video frame area, default 25%, tunable via `--min-photo-pct`), rejects
   near-uniform frames via `_is_near_uniform()` (grayscale std dev < 5.0), and rejects screenshots via `_is_screenshot()`
@@ -108,10 +114,11 @@ Key modules in `extract_photos/`:
   ensure NFS persistence, followed by verification (existence + non-zero size). Includes a small delay between copies
   to avoid overwhelming NFS. Reports per-file failures and exits non-zero if any copies fail.
 
-**test-videos/** - Contains test video directories (`test-video-1/`, `test-video-2/`), each with a test video and
-ground-truth timestamp files: `photo-timestamps.txt` (expected photos) and optionally `edge-cases.txt` (side-by-side
-photos and similar sequential photos). `test-video-1` has white-bordered photos (all-4-borders uniform),
-`test-video-2` has black pillarbox-bordered photos. Used by the slow integration tests in `tests/test_video_integration.py`.
+**test-videos/** - Contains test video directories (`test-video-1/`, `test-video-2/`, `test-video-3/`), each with a test
+video and ground-truth timestamp files: `photo-timestamps.txt` (expected photos) and optionally `edge-cases.txt`
+(side-by-side photos and similar sequential photos). `test-video-1` has white-bordered photos (all-4-borders uniform),
+`test-video-2` has black pillarbox-bordered photos, `test-video-3` has white pillarbox-bordered photos. Integration
+tests auto-discover all `test-video-*` directories and run parametrized across them.
 
 **bin/epm** - Bash wrapper that SSHes into a remote host to run the tool on a single video. Accepts `host=NAME` to select
 the target: `immich_lxc` (default, SSH host `immich`) or `media_vm` (SSH host `media`). Auto-installs repo/deps on first

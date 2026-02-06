@@ -21,6 +21,7 @@ from extract_photos.utils import make_safe_folder_name, setup_logger
 HASH_SIZE = 8
 HASH_DIFF_THRESHOLD = 10  # hamming distance out of 64 bits — for first-detection
 HASH_STEP_THRESHOLD = 3  # step-to-step threshold — same photo has distance 0-2
+STATIC_MAD_THRESHOLD = 0.5  # mean absolute pixel difference — frames below this are "identical"
 
 VAAPI_DEVICE = "/dev/dri/renderD128"
 _vaapi_available: bool | None = None
@@ -102,28 +103,34 @@ def hash_difference(hash1: np.ndarray, hash2: np.ndarray) -> int:
     return np.count_nonzero(hash1 != hash2)
 
 
-def detect_almost_uniform_borders(frame: np.ndarray, border_width: int = 5, threshold: float = 5, pillarbox_threshold: float = 1) -> bool:
+def detect_almost_uniform_borders(
+    frame: np.ndarray, border_width: int = 5, threshold: float = 5, pillarbox_threshold: float = 1,
+    detect_all_borders: bool = True, detect_pillarbox: bool = True, detect_letterbox: bool = True,
+) -> bool:
     """
     Checks if a frame has almost uniform borders.
 
-    Detects three border patterns:
+    Detects three border patterns (each independently toggleable):
     1. All four borders uniform (photos with full border, e.g. white borders)
-    2. Left + Right borders uniform AND truly black (pillarbox/side borders only)
-    3. Top + Bottom borders uniform AND truly black (letterbox/top-bottom borders only)
+    2. Left + Right borders uniform AND extreme-valued (pillarbox/side borders only)
+    3. Top + Bottom borders uniform AND extreme-valued (letterbox/top-bottom borders only)
 
     The all-4-borders check uses threshold=5 to avoid false positives from dark video
     scenes. Pillarbox/letterbox detection requires both very low std (threshold=1) AND
-    truly black pixels (max value < 3) to distinguish real pillarbox bars from dark
-    video content that happens to have uniform edges.
+    extreme pixel values (near-black: max < 3, or near-white: min > 248) to distinguish
+    real border bars from video content that happens to have uniform edges.
 
     Parameters:
         frame (np.array): The input video frame (grayscale or color).
         border_width (int): The width of the borders to check (default 5).
         threshold (float): Max std deviation for all-4-borders uniformity (default 5).
         pillarbox_threshold (float): Stricter std threshold for pillarbox/letterbox (default 1).
+        detect_all_borders (bool): Enable all-4-borders pattern (default True).
+        detect_pillarbox (bool): Enable pillarbox pattern (default True).
+        detect_letterbox (bool): Enable letterbox pattern (default True).
 
     Returns:
-        bool: True if borders match any of the three patterns, False otherwise.
+        bool: True if borders match any enabled pattern, False otherwise.
     """
     # Convert frame to grayscale if it is not already
     gray_frame = (
@@ -142,31 +149,38 @@ def detect_almost_uniform_borders(frame: np.ndarray, border_width: int = 5, thre
     top_std = np.std(top_border)  # type: ignore[reportArgumentType]
     bottom_std = np.std(bottom_border)  # type: ignore[reportArgumentType]
 
-    # Pattern 1: All four borders uniform (threshold 10)
-    all_four_uniform = (
-        left_std <= threshold and right_std <= threshold and
-        top_std <= threshold and bottom_std <= threshold
-    )
-    if all_four_uniform:
-        return True
+    # Pattern 1: All four borders uniform
+    if detect_all_borders:
+        all_four_uniform = (
+            left_std <= threshold and right_std <= threshold and
+            top_std <= threshold and bottom_std <= threshold
+        )
+        if all_four_uniform:
+            return True
 
     # Pattern 2: Pillarbox - left and right borders very uniform (stricter threshold)
-    # Also require borders to be truly black (max pixel value < 3) to avoid dark scene false positives
-    pillarbox = left_std <= pillarbox_threshold and right_std <= pillarbox_threshold
-    if pillarbox:
-        left_max = np.max(left_border)
-        right_max = np.max(right_border)
-        if left_max < 3 and right_max < 3:
-            return True
+    # Also require borders to be extreme-valued (near-black or near-white) to avoid dark scene false positives
+    if detect_pillarbox:
+        pillarbox = left_std <= pillarbox_threshold and right_std <= pillarbox_threshold
+        if pillarbox:
+            left_max = np.max(left_border)
+            right_max = np.max(right_border)
+            left_min = np.min(left_border)
+            right_min = np.min(right_border)
+            if (left_max < 3 and right_max < 3) or (left_min > 248 and right_min > 248):
+                return True
 
     # Pattern 3: Letterbox - top and bottom borders very uniform (stricter threshold)
-    # Also require borders to be truly black (max pixel value < 3) to avoid dark scene false positives
-    letterbox = top_std <= pillarbox_threshold and bottom_std <= pillarbox_threshold
-    if letterbox:
-        top_max = np.max(top_border)
-        bottom_max = np.max(bottom_border)
-        if top_max < 3 and bottom_max < 3:
-            return True
+    # Also require borders to be extreme-valued (near-black or near-white) to avoid dark scene false positives
+    if detect_letterbox:
+        letterbox = top_std <= pillarbox_threshold and bottom_std <= pillarbox_threshold
+        if letterbox:
+            top_max = np.max(top_border)
+            bottom_max = np.max(bottom_border)
+            top_min = np.min(top_border)
+            bottom_min = np.min(bottom_border)
+            if (top_max < 3 and bottom_max < 3) or (top_min > 248 and bottom_min > 248):
+                return True
 
     return False
 
@@ -380,11 +394,33 @@ def transcode_lowres(video_file: str, video_duration_sec: float) -> str:
     return concat_out.name
 
 
-def scan_for_photos(lowres_path: str, step_time: float, filename: str, video_duration_sec: float) -> list[tuple[float, str]]:
+def _format_scan_timestamp(timestamp_sec: float) -> str:
+    """Format a timestamp for scan results (e.g. '2m05.3s')."""
+    total_seconds = int(timestamp_sec)
+    tenths = int((timestamp_sec - total_seconds) * 10)
+    minutes, seconds = divmod(total_seconds, 60)
+    if tenths > 0:
+        return f"{minutes}m{seconds:02d}.{tenths}s"
+    return f"{minutes}m{seconds:02d}s"
+
+
+def scan_for_photos(
+    lowres_path: str, step_time: float, filename: str, video_duration_sec: float,
+    min_photo_duration: float = 0.5,
+    detect_all_borders: bool = True, detect_pillarbox: bool = True, detect_letterbox: bool = True,
+) -> list[tuple[float, str]]:
     """Scan the low-res video for frames containing photos.
 
-    Steps through frames at step_time intervals, detects uniform borders,
-    and deduplicates using perceptual hashing.
+    Uses a two-phase approach:
+    1. Static detection — finds segments where consecutive frames are pixel-identical
+       (mean absolute difference < STATIC_MAD_THRESHOLD) for at least
+       min_photo_duration seconds.
+    2. Border detection — checks if the static frame has uniform borders matching
+       any enabled pattern (all-4-borders, pillarbox, letterbox).
+
+    Frames that are near-uniform (solid black/white screens) are rejected.
+    Perceptual hashing deduplicates consecutive segments with identical content
+    (e.g. encoding glitches splitting one photo into two segments).
 
     Returns a list of (timestamp_sec, time_str) tuples for each unique photo found.
     """
@@ -395,9 +431,16 @@ def scan_for_photos(lowres_path: str, step_time: float, filename: str, video_dur
         frame_step = 1
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    prev_photo_hash = None
-    prev_step_hash = None
-    photo_timestamps = []
+    prev_gray: np.ndarray | None = None
+    prev_frame: np.ndarray | None = None
+    prev_ts: float = 0.0
+
+    # Static segment tracking
+    segment_start_ts: float = 0.0
+    segment_frame: np.ndarray | None = None  # color frame at segment start
+
+    photo_timestamps: list[tuple[float, str]] = []
+    prev_photo_hash: np.ndarray | None = None  # for dedup across consecutive segments
     last_progress_time = 0.0
     wall_start = time.monotonic()
 
@@ -406,59 +449,73 @@ def scan_for_photos(lowres_path: str, step_time: float, filename: str, video_dur
     print()
     print()
 
+    def _try_confirm_segment(seg_start_ts: float, seg_end_ts: float, seg_frame: np.ndarray) -> None:
+        """Check if a completed static segment is a photo and record it."""
+        nonlocal prev_photo_hash
+        seg_duration = seg_end_ts - seg_start_ts
+        if seg_duration < min_photo_duration:
+            return
+        if _is_near_uniform(seg_frame) is not None:
+            return
+        if not detect_almost_uniform_borders(
+            seg_frame,
+            detect_all_borders=detect_all_borders,
+            detect_pillarbox=detect_pillarbox,
+            detect_letterbox=detect_letterbox,
+        ):
+            return
+        # Dedup against previous confirmed photo (catches encoding glitches
+        # that split one photo into two adjacent static segments)
+        seg_hash = compute_frame_hash(seg_frame)
+        if prev_photo_hash is not None and hash_difference(seg_hash, prev_photo_hash) <= HASH_DIFF_THRESHOLD:
+            return
+        photo_timestamps.append((seg_start_ts, _format_scan_timestamp(seg_start_ts)))
+        prev_photo_hash = seg_hash
+
     while True:
-        current_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
-        if current_frame >= total_frames:
+        current_pos = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+        if current_pos >= total_frames:
             break
 
         ret, frame = cap.read()
         if not ret:
             break
 
-        # Map low-res frame position back to original video timestamp
-        timestamp_sec = current_frame / lowres_fps if lowres_fps > 0 else 0
-        # Use truncation (not rounding) so tenths stays 0-9
-        total_seconds = int(timestamp_sec)
-        tenths = int((timestamp_sec - total_seconds) * 10)
-        minutes, seconds = divmod(total_seconds, 60)
-        if tenths > 0:
-            time_str = f"{minutes}m{seconds:02d}.{tenths}s"
-        else:
-            time_str = f"{minutes}m{seconds:02d}s"
+        timestamp_sec = current_pos / lowres_fps if lowres_fps > 0 else 0
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        if detect_almost_uniform_borders(frame) and _is_near_uniform(frame) is None:
-            frame_hash = compute_frame_hash(frame)
-            # Detect new photo by comparing against the previous step's hash.
-            # Consecutive frames of the same photo have distance 0-2; any
-            # larger change means the video transitioned to a different photo.
-            # Also compare against the last *recorded* photo hash for the
-            # initial detection (prev_step_hash is None on first photo frame).
-            step_changed = (
-                prev_step_hash is not None
-                and hash_difference(frame_hash, prev_step_hash) > HASH_STEP_THRESHOLD
-            )
-            is_new_photo = (
-                prev_photo_hash is None
-                or step_changed
-                or hash_difference(frame_hash, prev_photo_hash) > HASH_DIFF_THRESHOLD
-            )
-            if is_new_photo:
-                photo_timestamps.append((timestamp_sec, time_str))
-                prev_photo_hash = frame_hash
-            prev_step_hash = frame_hash
+        # Pixel-level static detection
+        if prev_gray is not None:
+            mad = np.mean(cv2.absdiff(gray, prev_gray))  # type: ignore[reportCallIssue,reportArgumentType]
+            is_static = mad < STATIC_MAD_THRESHOLD
         else:
-            # Not a photo frame — reset both hashes so the next photo
-            # is always detected as new.
+            is_static = False
+
+        if is_static:
+            if segment_frame is None:
+                # Start of new static segment (began at the previous frame)
+                segment_start_ts = prev_ts
+                segment_frame = prev_frame
+        else:
+            # End of static segment (if any)
+            if segment_frame is not None:
+                _try_confirm_segment(segment_start_ts, prev_ts, segment_frame)
+                segment_frame = None
+            # Reset dedup hash during non-static content so the next static
+            # segment is always treated as a fresh detection
             prev_photo_hash = None
-            prev_step_hash = None
 
-        cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame + frame_step)
+        prev_gray = gray
+        prev_frame = frame
+        prev_ts = timestamp_sec
+
+        cap.set(cv2.CAP_PROP_POS_FRAMES, current_pos + frame_step)
 
         # Update progress display every second
         now = time.monotonic()
         if now - last_progress_time >= 1.0:
             last_progress_time = now
-            pct = current_frame / total_frames * 100 if total_frames > 0 else 0
+            pct = current_pos / total_frames * 100 if total_frames > 0 else 0
             wall_elapsed = now - wall_start
             if pct > 2.0:
                 eta_sec = wall_elapsed / (pct / 100) - wall_elapsed
@@ -473,6 +530,10 @@ def scan_for_photos(lowres_path: str, step_time: float, filename: str, video_dur
                 len(photo_timestamps),
                 eta_str,
             )
+
+    # Flush last segment (video may end during a static segment)
+    if segment_frame is not None:
+        _try_confirm_segment(segment_start_ts, prev_ts, segment_frame)
 
     cap.release()
 
@@ -748,7 +809,10 @@ def transcode_for_playback(video_file: str, output_dir: str) -> str:
 
 
 def extract_photos_from_video(
-    video_file: str, output_folder: str, step_time: float, filename: str, border_px: int = 5, min_photo_pct: int = 25, include_text: bool = False
+    video_file: str, output_folder: str, step_time: float, filename: str,
+    border_px: int = 5, min_photo_pct: int = 25, include_text: bool = False,
+    min_photo_duration: float = 0.5,
+    detect_all_borders: bool = True, detect_pillarbox: bool = True, detect_letterbox: bool = True,
 ) -> None:
     """Extract photos from a video using a three-phase pipeline:
     1. Transcode to low-res temp file
@@ -758,6 +822,12 @@ def extract_photos_from_video(
     min_photo_pct: minimum photo area as a percentage of total frame area.
         Photos smaller than this fraction of the video frame are rejected.
         Default 25 (i.e. 25%).
+    min_photo_duration: minimum seconds a photo must persist on screen to be
+        recorded.  Filters out transient false positives like transition frames.
+        Default 0.5.
+    detect_all_borders: enable all-4-borders detection pattern (default True).
+    detect_pillarbox: enable pillarbox detection pattern (default True).
+    detect_letterbox: enable letterbox detection pattern (default True).
     """
     os.makedirs(output_folder, exist_ok=True)
 
@@ -791,7 +861,11 @@ def extract_photos_from_video(
         # Phase 2: Scan low-res for photo timestamps
         print(f"{_ts()} [2/3] Scanning for photos...", flush=True)
         photo_timestamps = scan_for_photos(
-            lowres_path, step_time, filename, video_duration_sec
+            lowres_path, step_time, filename, video_duration_sec,
+            min_photo_duration=min_photo_duration,
+            detect_all_borders=detect_all_borders,
+            detect_pillarbox=detect_pillarbox,
+            detect_letterbox=detect_letterbox,
         )
         logger.info(f"Scan complete: found {len(photo_timestamps)} candidate photos")
 

@@ -46,6 +46,30 @@ def main() -> None:
         default=False,
         help="Include text/annotations next to photos (default: no). Use --include-text to keep them.",
     )
+    parser.add_argument(
+        "--min-photo-duration",
+        type=float,
+        default=0.5,
+        help="Minimum seconds a photo must persist on screen to be detected (default: 0.5). Filters transient false positives.",
+    )
+    parser.add_argument(
+        "--detect-all-borders",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable all-4-borders detection pattern (default: yes).",
+    )
+    parser.add_argument(
+        "--detect-pillarbox",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable pillarbox (left+right borders) detection pattern (default: yes).",
+    )
+    parser.add_argument(
+        "--detect-letterbox",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable letterbox (top+bottom borders) detection pattern (default: yes).",
+    )
 
     args = parser.parse_args()
 
@@ -73,6 +97,10 @@ def main() -> None:
         border_px=args.border_px,
         min_photo_pct=args.min_photo_pct,
         include_text=args.include_text,
+        min_photo_duration=args.min_photo_duration,
+        detect_all_borders=args.detect_all_borders,
+        detect_pillarbox=args.detect_pillarbox,
+        detect_letterbox=args.detect_letterbox,
     )
 
 

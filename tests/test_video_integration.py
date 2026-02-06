@@ -1,6 +1,6 @@
-"""Integration tests using the real test video.
+"""Integration tests using real test videos.
 
-These tests are slow (require transcoding + scanning a real video) and are
+These tests are slow (require transcoding + scanning real videos) and are
 excluded from default pytest runs.  Run them explicitly with:
 
     uv run pytest tests/test_video_integration.py -m slow
@@ -20,20 +20,33 @@ from extract_photos.extract import (
 )
 from extract_photos.utils import setup_logger
 
-TEST_VIDEO_DIR = os.path.join(os.path.dirname(__file__), "..", "test-videos", "test-video-1")
-TIMESTAMPS_FILE = os.path.join(TEST_VIDEO_DIR, "photo-timestamps.txt")
-EDGE_CASES_FILE = os.path.join(TEST_VIDEO_DIR, "edge-cases.txt")
+TEST_VIDEOS_ROOT = os.path.join(os.path.dirname(__file__), "..", "test-videos")
 TOLERANCE_SEC = 3.0  # match tolerance between expected and detected timestamps
+VIDEO_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov", ".webm")
 
 
-def _find_test_video():
-    """Return the path to the test video, or None if not present."""
-    if not os.path.isdir(TEST_VIDEO_DIR):
-        return None
-    for f in os.listdir(TEST_VIDEO_DIR):
-        if f.endswith(".mp4"):
-            return os.path.join(TEST_VIDEO_DIR, f)
+def _find_video_in_dir(video_dir):
+    """Return the path to the first video file in a directory, or None."""
+    for f in sorted(os.listdir(video_dir)):
+        if any(f.endswith(ext) for ext in VIDEO_EXTENSIONS):
+            return os.path.join(video_dir, f)
     return None
+
+
+def _discover_test_video_dirs():
+    """Find all test-video-* directories that have both a video and photo-timestamps.txt."""
+    dirs = []
+    if not os.path.isdir(TEST_VIDEOS_ROOT):
+        return dirs
+    for name in sorted(os.listdir(TEST_VIDEOS_ROOT)):
+        d = os.path.join(TEST_VIDEOS_ROOT, name)
+        if not os.path.isdir(d) or not name.startswith("test-video-"):
+            continue
+        ts_file = os.path.join(d, "photo-timestamps.txt")
+        video = _find_video_in_dir(d)
+        if os.path.isfile(ts_file) and video:
+            dirs.append(d)
+    return dirs
 
 
 def _parse_expected_timestamps(path):
@@ -96,39 +109,73 @@ def _parse_rejection_timestamps(path):
     return timestamps
 
 
-TEST_VIDEO = _find_test_video()
-skip_no_video = pytest.mark.skipif(TEST_VIDEO is None, reason="Test video not present")
+_test_video_dirs = _discover_test_video_dirs()
+skip_no_videos = pytest.mark.skipif(len(_test_video_dirs) == 0, reason="No test videos present")
+
+
+# --- Module-level fixtures parametrized over test video directories ---
+
+
+@pytest.fixture(scope="class", params=_test_video_dirs, ids=lambda d: os.path.basename(d))
+def video_dir(request):
+    return request.param
+
+
+@pytest.fixture(scope="class")
+def test_video_path(video_dir):
+    path = _find_video_in_dir(video_dir)
+    assert path is not None, f"No video file found in {video_dir}"
+    return path
+
+
+@pytest.fixture(scope="class")
+def video_metadata(test_video_path):
+    return get_video_metadata(test_video_path)
+
+
+@pytest.fixture(scope="class")
+def scan_results(test_video_path, video_metadata):
+    """Transcode and scan the test video once per video directory."""
+    _fps, duration, _w, _h = video_metadata
+    lowres_path = transcode_lowres(test_video_path, duration)
+    try:
+        timestamps = scan_for_photos(
+            lowres_path, 0.4, os.path.basename(test_video_path), duration,
+            min_photo_duration=0.5,
+        )
+    finally:
+        os.unlink(lowres_path)
+    return timestamps
+
+
+@pytest.fixture(scope="class")
+def expected_timestamps(video_dir):
+    return _parse_expected_timestamps(os.path.join(video_dir, "photo-timestamps.txt"))
+
+
+@pytest.fixture(scope="class")
+def edge_case_timestamps(video_dir):
+    path = os.path.join(video_dir, "edge-cases.txt")
+    if not os.path.isfile(path):
+        pytest.skip("edge-cases.txt not present")
+    return _parse_edge_case_timestamps(path)
+
+
+@pytest.fixture(scope="class")
+def rejection_timestamps(video_dir):
+    path = os.path.join(video_dir, "edge-cases.txt")
+    if not os.path.isfile(path):
+        pytest.skip("edge-cases.txt not present")
+    timestamps = _parse_rejection_timestamps(path)
+    if not timestamps:
+        pytest.skip("No rejection timestamps in edge-cases.txt")
+    return timestamps
 
 
 @pytest.mark.slow
-@skip_no_video
+@skip_no_videos
 class TestVideoIntegration:
-    """End-to-end tests against the real test video."""
-
-    @pytest.fixture(scope="class")
-    def video_metadata(self):
-        return get_video_metadata(TEST_VIDEO)
-
-    @pytest.fixture(scope="class")
-    def scan_results(self, video_metadata):
-        """Transcode and scan the test video once for the whole class."""
-        fps, duration, _w, _h = video_metadata
-        lowres_path = transcode_lowres(TEST_VIDEO, duration)
-        try:
-            timestamps = scan_for_photos(lowres_path, 0.4, "test.mp4", duration)
-        finally:
-            os.unlink(lowres_path)
-        return timestamps
-
-    @pytest.fixture(scope="class")
-    def expected_timestamps(self):
-        return _parse_expected_timestamps(TIMESTAMPS_FILE)
-
-    @pytest.fixture(scope="class")
-    def edge_case_timestamps(self):
-        if not os.path.isfile(EDGE_CASES_FILE):
-            pytest.skip("edge-cases.txt not present")
-        return _parse_edge_case_timestamps(EDGE_CASES_FILE)
+    """End-to-end tests against real test videos (parametrized over all test-video-* dirs)."""
 
     def test_all_expected_timestamps_found(self, scan_results, expected_timestamps):
         """Every expected photo timestamp should have a scan match within tolerance."""
@@ -144,7 +191,7 @@ class TestVideoIntegration:
             f"Expected timestamps not found in scan (tolerance {TOLERANCE_SEC}s): {missing}"
         )
 
-    def test_extraction_does_not_reject_expected(self, scan_results, expected_timestamps, video_metadata):
+    def test_extraction_does_not_reject_expected(self, scan_results, expected_timestamps, video_metadata, test_video_path):
         """Frames at expected timestamps should pass the extraction-phase validation."""
         _fps, _duration, frame_w, frame_h = video_metadata
         min_photo_area = int(frame_w * frame_h * 25 / 100)
@@ -161,7 +208,7 @@ class TestVideoIntegration:
             log_file = os.path.join(tmpdir, "test.log")
             logger = setup_logger(log_file)
             saved = extract_fullres_frames(
-                TEST_VIDEO, tmpdir, matched_candidates, "test.mp4", logger,
+                test_video_path, tmpdir, matched_candidates, os.path.basename(test_video_path), logger,
                 min_photo_area=min_photo_area,
             )
 
@@ -183,7 +230,7 @@ class TestVideoIntegration:
             f"Edge-case timestamps not found in scan (tolerance {TOLERANCE_SEC}s): {missing}"
         )
 
-    def test_edge_cases_not_rejected_at_extraction(self, scan_results, edge_case_timestamps, video_metadata):
+    def test_edge_cases_not_rejected_at_extraction(self, scan_results, edge_case_timestamps, video_metadata, test_video_path):
         """Edge-case photos should pass the extraction-phase validation."""
         _fps, _duration, frame_w, frame_h = video_metadata
         min_photo_area = int(frame_w * frame_h * 25 / 100)
@@ -199,7 +246,7 @@ class TestVideoIntegration:
             log_file = os.path.join(tmpdir, "test.log")
             logger = setup_logger(log_file)
             saved = extract_fullres_frames(
-                TEST_VIDEO, tmpdir, matched_candidates, "test.mp4", logger,
+                test_video_path, tmpdir, matched_candidates, os.path.basename(test_video_path), logger,
                 min_photo_area=min_photo_area,
             )
 
@@ -207,16 +254,7 @@ class TestVideoIntegration:
             f"Expected {len(matched_candidates)} edge-case photos saved, got {saved}"
         )
 
-    @pytest.fixture(scope="class")
-    def rejection_timestamps(self):
-        if not os.path.isfile(EDGE_CASES_FILE):
-            pytest.skip("edge-cases.txt not present")
-        timestamps = _parse_rejection_timestamps(EDGE_CASES_FILE)
-        if not timestamps:
-            pytest.skip("No rejection timestamps in edge-cases.txt")
-        return timestamps
-
-    def test_ui_screens_rejected_at_extraction(self, scan_results, rejection_timestamps, video_metadata):
+    def test_ui_screens_rejected_at_extraction(self, scan_results, rejection_timestamps, video_metadata, test_video_path):
         """UI/screenshot frames should be rejected during extraction (saved == 0)."""
         _fps, _duration, frame_w, frame_h = video_metadata
         min_photo_area = int(frame_w * frame_h * 25 / 100)
@@ -236,7 +274,7 @@ class TestVideoIntegration:
             log_file = os.path.join(tmpdir, "test.log")
             logger = setup_logger(log_file)
             saved = extract_fullres_frames(
-                TEST_VIDEO, tmpdir, matched_candidates, "test.mp4", logger,
+                test_video_path, tmpdir, matched_candidates, os.path.basename(test_video_path), logger,
                 min_photo_area=min_photo_area,
             )
 
