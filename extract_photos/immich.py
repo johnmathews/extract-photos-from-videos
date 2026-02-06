@@ -41,6 +41,8 @@ def immich_request(
                 if not content:
                     return None
                 return json.loads(content)
+        except urllib.error.HTTPError:
+            raise  # HTTP responses (4xx/5xx) are intentional — don't retry
         except (urllib.error.URLError, ConnectionRefusedError, TimeoutError) as e:
             last_error = e
             if attempt < retries - 1:
@@ -446,11 +448,12 @@ def main() -> None:
                 print("user not found")
                 log(f"Warning: user '{args.share_user}' not found — album not shared")
         except urllib.error.HTTPError as e:
-            if e.code == 400:
+            body = e.read().decode("utf-8", errors="replace")
+            if e.code == 400 and "is already shared" in body.lower():
                 print("already shared")
             else:
                 print("failed")
-                log(f"Error: failed to share album: {e}")
+                log(f"Error: failed to share album (HTTP {e.code}): {body}")
         except urllib.error.URLError as e:
             print("failed")
             log(f"Error: failed to share album: {e}")

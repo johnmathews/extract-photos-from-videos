@@ -107,7 +107,9 @@ Key modules in `extract_photos/`:
   upload date via ffprobe or file mtime as fallback; photos get that base date plus their video offset), creates/reuses
   an album named after the video, adds assets in order, optionally shares the album, and optionally sends a Pushover
   notification. `immich_request()` includes retry logic with exponential backoff (2s, 4s, 8s, 16s, 32s) for transient
-  connection errors; API calls are paced with brief delays to avoid overloading the server. Log output includes `[HH:MM:SS]` timestamps for debugging. Uses stdlib (`urllib.request`, `urllib.parse`,
+  connection errors (HTTP errors are re-raised immediately without retry); API calls are paced with brief delays to
+  avoid overloading the server. Album sharing detects "already shared" via response body matching rather than assuming
+  all HTTP 400s are benign. Log output includes `[HH:MM:SS]` timestamps for debugging. Uses stdlib (`urllib.request`, `urllib.parse`,
   `json`, `subprocess`, `os`, `datetime`) plus ffprobe for metadata. Can be run directly:
   `python extract_photos/immich.py --api-url ... --api-key ... --library-id ... --asset-path ... --video-filename ...`.
 - **copy_to_nfs.py** - Copies files to NFS with fsync and verification for reliability. Called by `bin/epm` to copy
