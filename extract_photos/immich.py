@@ -61,16 +61,20 @@ def purge_existing_assets(api_url: str, api_key: str, asset_path: str) -> int:
 
     When assets are deleted from Immich UI, stale records can block re-import.
     This searches with withDeleted=True and force-deletes any matches.
+    Loops until all pages of results are purged.
     Returns count of purged assets.
     """
     url = f"{api_url}/api/search/metadata"
-    result = immich_request(url, api_key, method="POST", data={"originalPath": asset_path, "withDeleted": True})
-    assets = result.get("assets", {}).get("items", []) if isinstance(result, dict) else []
-    if not assets:
-        return 0
-    ids = [a["id"] for a in assets]
-    immich_request(f"{api_url}/api/assets", api_key, method="DELETE", data={"ids": ids, "force": True})
-    return len(ids)
+    total_purged = 0
+    while True:
+        result = immich_request(url, api_key, method="POST", data={"originalPath": asset_path, "withDeleted": True})
+        assets = result.get("assets", {}).get("items", []) if isinstance(result, dict) else []
+        if not assets:
+            break
+        ids = [a["id"] for a in assets]
+        immich_request(f"{api_url}/api/assets", api_key, method="DELETE", data={"ids": ids, "force": True})
+        total_purged += len(ids)
+    return total_purged
 
 
 def poll_for_assets(
@@ -308,17 +312,9 @@ def main() -> None:
 
     log("📚 Immich Integration")
 
-    # 1. Purge stale assets that may block re-import
     asset_search_path = args.asset_path.rstrip("/") + "/"
-    log("Purging stale assets...   ", end="", flush=True)
-    try:
-        purged = purge_existing_assets(api_url, args.api_key, asset_search_path)
-        print(f"{purged} removed" if purged else "none found")
-    except (urllib.error.URLError, KeyError, TypeError) as e:
-        print("failed")
-        log(f"Warning: failed to purge stale assets: {e}")
 
-    # 2. Trigger library scan
+    # 1. Trigger library scan
     log("Scanning library...       ", end="", flush=True)
     try:
         trigger_scan(api_url, args.api_key, args.library_id)
@@ -331,7 +327,7 @@ def main() -> None:
     # Give Immich time to start processing before polling
     time.sleep(3)
 
-    # 3. Poll for new assets
+    # 2. Poll for new assets
     expected = (args.photo_count + 1) if args.photo_count else 1
     log("Waiting for assets...     ", end="", flush=True)
     assets = poll_for_assets(
@@ -348,13 +344,13 @@ def main() -> None:
             " (library scan may still be running)"
         )
 
-    # 4. Order assets: video first, photos by timestamp
+    # 3. Order assets: video first, photos by timestamp
     log("Ordering assets...        ", end="", flush=True)
     ordered = order_assets(assets)
     asset_ids = [a["id"] for a in ordered]
     print("done")
 
-    # 5. Set dateTimeOriginal so Immich sorts by video timeline
+    # 4. Set dateTimeOriginal so Immich sorts by video timeline
     video_path = os.path.join(args.asset_path, args.video_filename)
     base_date = get_video_date(video_path)
     log(f"Video date: {base_date.strftime('%Y-%m-%d')}")
@@ -379,7 +375,7 @@ def main() -> None:
         print("failed")
         log(f"Warning: failed to set asset dates: {e}")
 
-    # 6. Create or find album, set sort order to oldest first
+    # 5. Create or find album, set sort order to oldest first
     log(f"Album: {album_name}")
     log("Creating album...         ", end="", flush=True)
     try:
@@ -397,7 +393,7 @@ def main() -> None:
         log(f"Error: failed to create/find album: {e}")
         sys.exit(1)
 
-    # 7. Add assets to album
+    # 6. Add assets to album
     log(f"Adding {len(asset_ids)} asset(s)...     ", end="", flush=True)
     try:
         results = add_assets_to_album(api_url, args.api_key, album_id, asset_ids)
@@ -435,7 +431,7 @@ def main() -> None:
         log(f"Error: failed to add assets to album: {e}")
         sys.exit(1)
 
-    # 8. Share album if user specified
+    # 7. Share album if user specified
     if not args.share_user:
         log("Sharing...                not configured (IMMICH_SHARE_USER not set)")
     else:
@@ -459,7 +455,7 @@ def main() -> None:
             print("failed")
             log(f"Error: failed to share album: {e}")
 
-    # 9. Send Pushover notification if configured
+    # 8. Send Pushover notification if configured
     if args.pushover_user_key and args.pushover_app_token:
         log("Sending notification...   ", end="", flush=True)
         try:

@@ -99,9 +99,10 @@ Key modules in `extract_photos/`:
 - **utils.py** - Photo validation, safe folder names, logging.
 - **display_progress.py** - `format_time()`, `build_progress_bar()`, and `print_scan_progress()` for 3-line in-place
   terminal progress.
-- **immich.py** - Standalone Immich integration script called by `bin/epm` after extraction. First purges any existing
-  assets (including trashed) at the target path via `purge_existing_assets()` to prevent stale records from blocking
-  re-import. Then triggers a library scan, polls for new assets (with early exit when poll count stabilises at zero),
+- **immich.py** - Standalone Immich integration script called by `bin/epm` after extraction. `purge_existing_assets()`
+  is a utility function (paginated: loops until all result pages are purged) used by `epm` to clear stale Immich records
+  before file operations; the `main()` CLI flow itself does not purge (epm handles purge timing). Triggers a library
+  scan, polls for new assets (with early exit when poll count stabilises at zero),
   orders them (video first, photos sorted by timestamp), sets `dateTimeOriginal` on each asset (video gets its YouTube
   upload date via ffprobe or file mtime as fallback; photos get that base date plus their video offset), creates/reuses
   an album named after the video, adds assets in order, optionally shares the album, and optionally sends a Pushover
@@ -124,7 +125,9 @@ tests auto-discover all `test-video-*` directories and run parametrized across t
 the target: `immich_lxc` (default, SSH host `immich`) or `media_vm` (SSH host `media`). Auto-installs repo/deps on first
 run and auto-updates (`git pull` + `uv sync`) on subsequent runs. Arguments with special shell characters (e.g. `[]` in
 filenames) must be quoted. Computes the sanitized output subdirectory name early (via `make_safe_folder_name`) and prompts
-skip-or-overwrite if it already contains extracted photos. Creates a temp dir with a symlink to bridge single-file input
+skip-or-overwrite if it already contains extracted photos. On overwrite, purges stale Immich assets BEFORE deleting
+files (via `purge_existing_assets()`) so Immich doesn't delete newly-copied files when it removes old records.
+Creates a temp dir with a symlink to bridge single-file input
 to the tool's directory-based interface. After extraction, copies photos to NFS via `copy_to_nfs.py` (with fsync +
 verification for reliability), then calls `immich.py` to scan the library, create an album, and optionally share it
 (when output is `/mnt/nfs/photos/reference` and Immich env vars are set). Runs the extraction inside

@@ -322,12 +322,25 @@ if [ -d "$FINAL_OUTPUT" ]; then
     done
 fi
 
+purge_immich_assets() {
+    # Purge stale Immich assets before removing files, so Immich doesn't delete newly-copied files
+    if [ -n "${IMMICH_API_URL:-}" ] && [ -n "${IMMICH_API_KEY:-}" ]; then
+        python -c "
+import sys
+from extract_photos.immich import purge_existing_assets
+purged = purge_existing_assets(sys.argv[1], sys.argv[2], sys.argv[3])
+if purged: print(f'Purged {purged} stale Immich asset(s)')
+" "$IMMICH_API_URL" "$IMMICH_API_KEY" "$FINAL_OUTPUT/" || true
+    fi
+}
+
 if $HAS_JPG && $HAS_VID; then
     echo "Output already exists: $FINAL_OUTPUT"
     read -p "(s)kip or (o)verwrite? [s/o]: " CHOICE
     case "$CHOICE" in
         o|O)
             echo "Removing old output..."
+            purge_immich_assets
             rm -rf "$FINAL_OUTPUT"
             ;;
         *) echo "Skipping."; write_result 0 0 skipped; exit 0 ;;
@@ -338,6 +351,7 @@ elif $HAS_JPG; then
     case "$CHOICE" in
         o|O)
             echo "Removing old output..."
+            purge_immich_assets
             rm -rf "$FINAL_OUTPUT"
             ;;
         *) echo "Skipping."; write_result 0 0 skipped; exit 0 ;;

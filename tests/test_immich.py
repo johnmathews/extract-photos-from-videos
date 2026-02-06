@@ -133,13 +133,11 @@ class TestPurgeExistingAssets:
         mock_req.side_effect = [
             {"assets": {"items": [{"id": "a1"}, {"id": "a2"}]}},
             None,  # DELETE response
+            {"assets": {"items": []}},  # Second search returns empty, loop ends
         ]
         result = purge_existing_assets("http://immich", "key", "/photos/subdir/")
         assert result == 2
-        assert mock_req.call_count == 2
-        mock_req.assert_called_with(
-            "http://immich/api/assets", "key", method="DELETE", data={"ids": ["a1", "a2"], "force": True}
-        )
+        assert mock_req.call_count == 3
 
     @patch("extract_photos.immich.immich_request")
     def test_returns_zero_when_none_found(self, mock_req):
@@ -832,7 +830,6 @@ class TestMain:
         ]
         with (
             patch("sys.argv", ["immich.py"] + args),
-            patch("extract_photos.immich.purge_existing_assets", return_value=0),
             patch("extract_photos.immich.trigger_scan"),
             patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}, {"id": "a2"}]),
             patch("extract_photos.immich.find_or_create_album", return_value="album-1"),
@@ -847,7 +844,6 @@ class TestMain:
 
         output = capsys.readouterr().out
         assert "📚 Immich Integration" in output
-        assert "Purging stale assets..." in output
         assert "Scanning library..." in output
         assert "Waiting for assets..." in output
         assert "2 found" in output
@@ -859,39 +855,3 @@ class TestMain:
         assert "Adding 2 asset(s)..." in output
         assert "Sharing with john..." in output
 
-    @patch("extract_photos.immich.add_assets_to_album")
-    @patch("extract_photos.immich.find_or_create_album", return_value="album-1")
-    @patch("extract_photos.immich.poll_for_assets", return_value=[{"id": "a1"}])
-    @patch("extract_photos.immich.trigger_scan")
-    @patch("extract_photos.immich.purge_existing_assets")
-    def test_purge_failure_does_not_abort(self, mock_purge, mock_scan, mock_poll, mock_album, mock_add, capsys):
-        """Purge failure is non-fatal — main() continues to scan and import."""
-        import urllib.error
-
-        from extract_photos.immich import main
-
-        mock_purge.side_effect = urllib.error.URLError("connection refused")
-        mock_add.return_value = [{"id": "a1", "success": True}]
-
-        args = [
-            "--api-url", "http://immich",
-            "--api-key", "key",
-            "--library-id", "lib-1",
-            "--asset-path", "/photos/subdir",
-            "--video-filename", "Author-Title.mkv",
-        ]
-        with (
-            patch("sys.argv", ["immich.py"] + args),
-            patch("extract_photos.immich.get_video_date", return_value=datetime(2000, 1, 1, tzinfo=timezone.utc)),
-            patch("extract_photos.immich.update_asset_date"),
-            patch("extract_photos.immich.immich_request"),
-        ):
-            main()
-
-        output = capsys.readouterr().out
-        assert "Purging stale assets..." in output
-        assert "failed" in output
-        # Flow continued past the purge failure
-        mock_scan.assert_called_once()
-        mock_poll.assert_called_once()
-        mock_album.assert_called_once()
