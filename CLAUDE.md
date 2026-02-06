@@ -103,6 +103,10 @@ Key modules in `extract_photos/`:
   connection errors; API calls are paced with brief delays to avoid overloading the server. Log output includes `[HH:MM:SS]` timestamps for debugging. Uses stdlib (`urllib.request`, `urllib.parse`,
   `json`, `subprocess`, `os`, `datetime`) plus ffprobe for metadata. Can be run directly:
   `python extract_photos/immich.py --api-url ... --api-key ... --library-id ... --asset-path ... --video-filename ...`.
+- **copy_to_nfs.py** - Copies files to NFS with fsync and verification for reliability. Called by `bin/epm` to copy
+  extracted photos to the NFS destination. Each file is copied with `shutil.copy2()`, then `os.fsync()` is called to
+  ensure NFS persistence, followed by verification (existence + non-zero size). Includes a small delay between copies
+  to avoid overwhelming NFS. Reports per-file failures and exits non-zero if any copies fail.
 
 **test-videos/** - Contains test video directories (`test-video-1/`, `test-video-2/`), each with a test video and
 ground-truth timestamp files: `photo-timestamps.txt` (expected photos) and optionally `edge-cases.txt` (side-by-side
@@ -114,8 +118,9 @@ the target: `immich_lxc` (default, SSH host `immich`) or `media_vm` (SSH host `m
 run and auto-updates (`git pull` + `uv sync`) on subsequent runs. Arguments with special shell characters (e.g. `[]` in
 filenames) must be quoted. Computes the sanitized output subdirectory name early (via `make_safe_folder_name`) and prompts
 skip-or-overwrite if it already contains extracted photos. Creates a temp dir with a symlink to bridge single-file input
-to the tool's directory-based interface. After extraction, calls `immich.py` to scan the library, create an album, and
-optionally share it (when output is `/mnt/nfs/photos/reference` and Immich env vars are set). Runs the extraction inside
+to the tool's directory-based interface. After extraction, copies photos to NFS via `copy_to_nfs.py` (with fsync +
+verification for reliability), then calls `immich.py` to scan the library, create an album, and optionally share it
+(when output is `/mnt/nfs/photos/reference` and Immich env vars are set). Runs the extraction inside
 a tmux session on the remote host for resilience: if the SSH connection drops (e.g. laptop lid close), tmux keeps the
 process alive. Re-running the same epm command detects the existing tmux session and reattaches. The session name is
 derived from the video path (`epm-<hash>`). After the extraction finishes, the tmux session waits for Enter so the user

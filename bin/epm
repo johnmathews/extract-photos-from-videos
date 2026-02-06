@@ -342,9 +342,15 @@ fi
 
 # Copy extracted photos (files only, skip logs/ subdirectory) to
 # FINAL_OUTPUT (computed earlier for the existing-output check).
-mkdir -p "$FINAL_OUTPUT"
-find "$EXTRACTED_DIR" -maxdepth 1 -type f -exec cp {} "$FINAL_OUTPUT/" \;
-echo "Copied $PHOTO_COUNT photo(s) to $FINAL_OUTPUT"
+# Uses Python module for fsync + verification to ensure NFS reliability.
+if ! python -m extract_photos.copy_to_nfs "$EXTRACTED_DIR" "$FINAL_OUTPUT"; then
+    echo "Error: Failed to copy all photos to $FINAL_OUTPUT"
+    write_result 0 0 copy_failed
+    exit 1
+fi
+
+# Get verified photo count from destination (after fsync + verification)
+VERIFIED_PHOTO_COUNT="$(find "$FINAL_OUTPUT" -maxdepth 1 -type f -name '*.jpg' | wc -l | tr -d ' ')"
 
 # Copy or transcode the video alongside the photos (with progress bar)
 REAL_VIDEO="$(realpath "$VIDEO")"
@@ -374,7 +380,7 @@ else
         [ -n "${IMMICH_SHARE_USER:-}" ] && IMMICH_ARGS+=(--share-user "$IMMICH_SHARE_USER")
         [ -n "${PUSHOVER_USER_KEY:-}" ] && [ -n "${PUSHOVER_APP_TOKEN:-}" ] && \
             IMMICH_ARGS+=(--pushover-user-key "$PUSHOVER_USER_KEY" --pushover-app-token "$PUSHOVER_APP_TOKEN")
-        IMMICH_ARGS+=(--photo-count "$PHOTO_COUNT")
+        IMMICH_ARGS+=(--photo-count "$VERIFIED_PHOTO_COUNT")
 
         python -m extract_photos.immich "${IMMICH_ARGS[@]}"
     fi
@@ -389,7 +395,7 @@ fi
 
 # Write success result (reset trap first to avoid writing "interrupted")
 trap 'rm -rf "$TMPDIR"' EXIT
-write_result 0 "$PHOTO_COUNT" success
+write_result 0 "$VERIFIED_PHOTO_COUNT" success
 EXTRACTION
 
 # Start extraction inside a tmux session for resilience against SSH drops.
