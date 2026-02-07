@@ -28,6 +28,7 @@ Options:
   detect_all_borders=BOOL  Enable all-4-borders detection pattern (default: true)
   detect_pillarbox=BOOL    Enable pillarbox detection pattern (default: true)
   detect_letterbox=BOOL    Enable letterbox detection pattern (default: true)
+  require_borders=BOOL     Require uniform borders to detect photos (default: true)
   include_text=BOOL        Include text/annotations next to photos (default: false)
   update_immich=BOOL       Run Immich integration after extraction (default: true)
   help                     Show this help message
@@ -134,6 +135,14 @@ for arg in "$@"; do
       EXTRA_ARGS+=("--detect-letterbox")
     else
       EXTRA_ARGS+=("--no-detect-letterbox")
+    fi
+    ;;
+  require_borders=*)
+    val="${arg#require_borders=}"
+    if [ "$val" = "true" ]; then
+      EXTRA_ARGS+=("--require-borders")
+    else
+      EXTRA_ARGS+=("--no-require-borders")
     fi
     ;;
   include_text=*)

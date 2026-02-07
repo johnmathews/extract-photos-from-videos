@@ -22,6 +22,7 @@ HASH_SIZE = 8
 HASH_DIFF_THRESHOLD = 10  # hamming distance out of 64 bits — for first-detection
 HASH_STEP_THRESHOLD = 3  # step-to-step threshold — same photo has distance 0-2
 STATIC_MAD_THRESHOLD = 0.5  # mean absolute pixel difference — frames below this are "identical"
+BORDERLESS_MAD_THRESHOLD = 0.25  # max avg MAD across a segment when require_borders=False
 
 VAAPI_DEVICE = "/dev/dri/renderD128"
 _vaapi_available: bool | None = None
@@ -408,6 +409,7 @@ def scan_for_photos(
     lowres_path: str, step_time: float, filename: str, video_duration_sec: float,
     min_photo_duration: float = 0.5,
     detect_all_borders: bool = True, detect_pillarbox: bool = True, detect_letterbox: bool = True,
+    require_borders: bool = True,
 ) -> list[tuple[float, str]]:
     """Scan the low-res video for frames containing photos.
 
@@ -438,6 +440,8 @@ def scan_for_photos(
     # Static segment tracking
     segment_start_ts: float = 0.0
     segment_frame: np.ndarray | None = None  # color frame at segment start
+    segment_mad_sum: float = 0.0
+    segment_mad_count: int = 0
 
     photo_timestamps: list[tuple[float, str]] = []
     prev_photo_hash: np.ndarray | None = None  # for dedup across consecutive segments
@@ -453,6 +457,7 @@ def scan_for_photos(
 
     def _try_confirm_segment(
         seg_start_ts: float, seg_end_ts: float, seg_frame: np.ndarray, gap_frames: int,
+        avg_mad: float,
     ) -> None:
         """Check if a completed static segment is a photo and record it."""
         nonlocal prev_photo_hash
@@ -461,7 +466,9 @@ def scan_for_photos(
             return
         if _is_near_uniform(seg_frame) is not None:
             return
-        if not detect_almost_uniform_borders(
+        if not require_borders and avg_mad > BORDERLESS_MAD_THRESHOLD:
+            return
+        if require_borders and not detect_almost_uniform_borders(
             seg_frame,
             detect_all_borders=detect_all_borders,
             detect_pillarbox=detect_pillarbox,
@@ -497,6 +504,7 @@ def scan_for_photos(
             mad = np.mean(cv2.absdiff(gray, prev_gray))  # type: ignore[reportCallIssue,reportArgumentType]
             is_static = mad < STATIC_MAD_THRESHOLD
         else:
+            mad = 0.0
             is_static = False
 
         if is_static:
@@ -505,11 +513,16 @@ def scan_for_photos(
                 segment_start_ts = prev_ts
                 segment_frame = prev_frame
                 gap_before_segment = nonstatic_run
+                segment_mad_sum = 0.0
+                segment_mad_count = 0
+            segment_mad_sum += mad
+            segment_mad_count += 1
             nonstatic_run = 0
         else:
             # End of static segment (if any)
             if segment_frame is not None:
-                _try_confirm_segment(segment_start_ts, prev_ts, segment_frame, gap_before_segment)
+                avg_mad = segment_mad_sum / segment_mad_count if segment_mad_count > 0 else 0.0
+                _try_confirm_segment(segment_start_ts, prev_ts, segment_frame, gap_before_segment, avg_mad)
                 segment_frame = None
             nonstatic_run += 1
             # Reset dedup hash after sustained non-static content so the next
@@ -547,7 +560,8 @@ def scan_for_photos(
 
     # Flush last segment (video may end during a static segment)
     if segment_frame is not None:
-        _try_confirm_segment(segment_start_ts, prev_ts, segment_frame, gap_before_segment)
+        avg_mad = segment_mad_sum / segment_mad_count if segment_mad_count > 0 else 0.0
+        _try_confirm_segment(segment_start_ts, prev_ts, segment_frame, gap_before_segment, avg_mad)
 
     cap.release()
 
@@ -827,6 +841,7 @@ def extract_photos_from_video(
     border_px: int = 5, min_photo_pct: int = 25, include_text: bool = False,
     min_photo_duration: float = 0.5,
     detect_all_borders: bool = True, detect_pillarbox: bool = True, detect_letterbox: bool = True,
+    require_borders: bool = True,
 ) -> None:
     """Extract photos from a video using a three-phase pipeline:
     1. Transcode to low-res temp file
@@ -880,6 +895,7 @@ def extract_photos_from_video(
             detect_all_borders=detect_all_borders,
             detect_pillarbox=detect_pillarbox,
             detect_letterbox=detect_letterbox,
+            require_borders=require_borders,
         )
         logger.info(f"Scan complete: found {len(photo_timestamps)} candidate photos")
 

@@ -54,10 +54,14 @@ Each video goes through three phases:
 2. **Scan** — Static-first architecture: single-threaded scan of the low-res copy steps through frames at `step_time`
    intervals and first identifies **static segments** — contiguous runs where consecutive frames are pixel-identical
    (Mean Absolute Difference < 0.5, `STATIC_MAD_THRESHOLD`). Segments shorter than `min_photo_duration` (default 0.5s)
-   are discarded. Each surviving segment is then tested for uniform borders via `detect_almost_uniform_borders()`
-   (supports three independently-toggleable patterns: all-4-borders uniform, pillarbox left+right borders, letterbox
-   top+bottom borders — each pattern detects both black and white borders). Near-uniform frames (black/white screens)
-   are rejected, and perceptual hashing deduplicates photos using two thresholds: tight (`HASH_STEP_THRESHOLD` 3) for
+   are discarded. Each surviving segment also tracks its average MAD across all frame pairs; when
+   `require_borders` is False, segments with average MAD above `BORDERLESS_MAD_THRESHOLD` (0.25) are rejected — this
+   filters talking-head frames (avg MAD 0.27–0.48) while keeping real photos (avg MAD 0.001–0.22). When borders are
+   required, border detection alone is sufficient so the MAD threshold is not applied. Each surviving segment is then
+   tested for uniform borders via `detect_almost_uniform_borders()` (supports three independently-toggleable patterns:
+   all-4-borders uniform, pillarbox left+right borders, letterbox top+bottom borders — each pattern detects both black
+   and white borders). Near-uniform frames (black/white screens) are rejected, and perceptual hashing deduplicates
+   photos using two thresholds: tight (`HASH_STEP_THRESHOLD` 3) for
    segments separated by a single non-static frame (codec keyframe artifacts that split one photo into two segments),
    and wider (`HASH_DIFF_THRESHOLD` 10) for segments separated by sustained non-static content. Hash state resets after
    2+ consecutive non-static frames to avoid false dedup of genuinely different photos; a single non-static frame
@@ -70,7 +74,8 @@ Key modules in `extract_photos/`:
 
 - **main.py** - Entry point. Parses args (`input_directory`, `-o`, `-s`, `-b`, `--min-photo-pct`,
   `--include-text`/`--no-include-text`, `--min-photo-duration`, `--detect-all-borders`/`--no-detect-all-borders`,
-  `--detect-pillarbox`/`--no-detect-pillarbox`, `--detect-letterbox`/`--no-detect-letterbox`), creates output dir,
+  `--detect-pillarbox`/`--no-detect-pillarbox`, `--detect-letterbox`/`--no-detect-letterbox`,
+  `--require-borders`/`--no-require-borders`), creates output dir,
   calls batch processor.
 - **batch_processor.py** - Scans directory for video files (.mp4/.mkv/.avi/.mov/.webm), creates per-video output
   subdirectories, calls extractor for each. Prompts skip-or-overwrite when a video's output directory already contains
@@ -82,6 +87,8 @@ Key modules in `extract_photos/`:
   `transcode_lowres()` creates the low-res temp file via ffmpeg. `scan_for_photos()` implements the static-first scan:
   tracks pixel-level MAD between consecutive frames to find static segments, filters by minimum duration, then applies
   border detection and hash dedup to candidates. `STATIC_MAD_THRESHOLD = 0.5` defines pixel-identity.
+  Per-segment average MAD is tracked and used as a quality filter when `require_borders=False`
+  (`BORDERLESS_MAD_THRESHOLD = 0.25`) to reject near-threshold segments like talking heads.
   `extract_fullres_frames()` seeks to each timestamp in the original video. `_rejection_reason()` validates extracted
   frames: checks minimum area (as % of video frame area, default 25%, tunable via `--min-photo-pct`), rejects
   near-uniform frames via `_is_near_uniform()` (grayscale std dev < 5.0), and rejects screenshots via `_is_screenshot()`

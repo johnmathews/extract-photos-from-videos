@@ -70,6 +70,12 @@ def main() -> None:
         default=True,
         help="Enable letterbox (top+bottom borders) detection pattern (default: yes).",
     )
+    parser.add_argument(
+        "--require-borders",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Require uniform borders to classify a frame as a photo (default: yes). Use --no-require-borders for full-frame photos without borders.",
+    )
 
     args = parser.parse_args()
 
@@ -101,6 +107,7 @@ def main() -> None:
         detect_all_borders=args.detect_all_borders,
         detect_pillarbox=args.detect_pillarbox,
         detect_letterbox=args.detect_letterbox,
+        require_borders=args.require_borders,
     )
 
 

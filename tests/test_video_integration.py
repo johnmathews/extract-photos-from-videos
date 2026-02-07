@@ -63,6 +63,24 @@ def _parse_expected_timestamps(path):
     return timestamps
 
 
+def _parse_scan_settings(path):
+    """Parse 'setting: key=value' directives from photo-timestamps.txt.
+
+    Returns a dict of keyword arguments to pass to scan_for_photos().
+    Supported settings: require_borders (bool).
+    """
+    settings: dict[str, object] = {}
+    bool_keys = {"require_borders"}
+    with open(path) as f:
+        for line in f:
+            m = re.match(r"^setting:\s*(\w+)=(\S+)", line.strip())
+            if m:
+                key, val = m.group(1), m.group(2)
+                if key in bool_keys:
+                    settings[key] = val.lower() == "true"
+    return settings
+
+
 def _parse_edge_case_timestamps(path):
     """Parse edge-cases.txt and return a list of (label, seconds) tuples.
 
@@ -134,14 +152,16 @@ def video_metadata(test_video_path):
 
 
 @pytest.fixture(scope="class")
-def scan_results(test_video_path, video_metadata):
+def scan_results(test_video_path, video_dir, video_metadata):
     """Transcode and scan the test video once per video directory."""
     _fps, duration, _w, _h = video_metadata
+    settings = _parse_scan_settings(os.path.join(video_dir, "photo-timestamps.txt"))
     lowres_path = transcode_lowres(test_video_path, duration)
     try:
         timestamps = scan_for_photos(
             lowres_path, 0.4, os.path.basename(test_video_path), duration,
             min_photo_duration=0.5,
+            **settings,
         )
     finally:
         os.unlink(lowres_path)

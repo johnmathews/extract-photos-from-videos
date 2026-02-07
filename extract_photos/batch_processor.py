@@ -35,6 +35,7 @@ def process_videos_in_directory(
     detect_all_borders: bool = True,
     detect_pillarbox: bool = True,
     detect_letterbox: bool = True,
+    require_borders: bool = True,
 ) -> None:
     """
     Processes all videos in the specified directory. For each video, it creates a subdirectory
@@ -98,6 +99,7 @@ def process_videos_in_directory(
             detect_all_borders=detect_all_borders,
             detect_pillarbox=detect_pillarbox,
             detect_letterbox=detect_letterbox,
+            require_borders=require_borders,
         )
 
     print(
