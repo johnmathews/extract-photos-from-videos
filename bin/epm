@@ -10,6 +10,7 @@ Examples:
   epm "/data/videos/sunset.mp4" step_time=1.0 border_px=10
   epm "/data/videos/sunset.mp4" output_dir=/data/photos update_immich=false
   epm "/data/videos/sunset.mp4" host=immich_lxc
+  epm "/data/videos/sunset.mp4" require_borders=false   # full-frame photos without borders
 
 Usage: epm "VIDEO" [output_dir=DIR] [options]
 
@@ -28,7 +29,8 @@ Options:
   detect_all_borders=BOOL  Enable all-4-borders detection pattern (default: true)
   detect_pillarbox=BOOL    Enable pillarbox detection pattern (default: true)
   detect_letterbox=BOOL    Enable letterbox detection pattern (default: true)
-  require_borders=BOOL     Require uniform borders to detect photos (default: true)
+  require_borders=BOOL     Require uniform borders to detect photos (default: true).
+                           Set to false for full-frame photos without borders.
   include_text=BOOL        Include text/annotations next to photos (default: false)
   update_immich=BOOL       Run Immich integration after extraction (default: true)
   help                     Show this help message
