@@ -55,11 +55,12 @@ def _parse_expected_timestamps(path):
     with open(path) as f:
         for line in f:
             line = line.strip()
-            m = re.match(r"^(\d+):(\d+)$", line)
+            m = re.match(r"^(\d+):(\d+)\b", line)
             if m:
                 minutes, seconds = int(m.group(1)), int(m.group(2))
                 total_sec = minutes * 60 + seconds
-                timestamps.append((line, total_sec))
+                label = f"{m.group(1)}:{m.group(2)}"
+                timestamps.append((label, total_sec))
     return timestamps
 
 

@@ -93,7 +93,8 @@ Key modules in `extract_photos/`:
   `extract_fullres_frames()` seeks to each timestamp in the original video. `_rejection_reason()` validates extracted
   frames: checks minimum area (as % of video frame area, default 25%, tunable via `--min-photo-pct`), rejects
   near-uniform frames via `_is_near_uniform()` (grayscale std dev < 5.0), and rejects screenshots via `_is_screenshot()`
-  (two-stage: first rejects images with >30% near-white pixels as UI screens via `_white_background_percentage()`;
+  (two-stage: first rejects images with >40% near-white pixels AND low color diversity (mean channel difference <15)
+  as UI screens — the dual requirement prevents false positives on backlit photos with bright skies;
   then rejects images with <100 quantized colors at 128x128; skips effectively-grayscale images for the color-count
   stage using mean channel difference < 10). `get_video_metadata()` returns `(fps, duration_sec, width, height)`.
   `transcode_for_playback()` transcodes video to H.264/MP4 for Immich compatibility with a progress bar (or copies if

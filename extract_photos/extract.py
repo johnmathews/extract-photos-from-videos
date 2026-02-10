@@ -217,10 +217,12 @@ def _is_screenshot(image: np.ndarray, color_count_threshold: int = 100, sample_s
     """Return a rejection reason if the image looks like a screenshot/UI, else None.
 
     Two-stage detection:
-    1. White-background check: rejects images with >30% near-white pixels (>240
-       brightness at 128x128). UI screens have large white backgrounds (40-70%);
-       photos rarely exceed 10%. Runs before the grayscale skip to catch both
-       color and near-grayscale UI screens.
+    1. White-background check: rejects images with >40% near-white pixels (>240
+       brightness at 128x128) AND low color diversity (mean channel difference <15).
+       UI screens have large white backgrounds (40-70%) and are nearly monochrome
+       (ch_diff 6-9); real photos with bright skies have higher color diversity
+       (ch_diff 15+). Requiring both signals prevents false positives on backlit
+       sunset/sky photos.
     2. Color-count check: downscales to sample_size x sample_size, quantizes colors
        to 32 levels per channel, and counts unique combinations. Simple screenshots
        with flat UI regions have 4-30 unique colors; photos have 100+.
@@ -229,22 +231,26 @@ def _is_screenshot(image: np.ndarray, color_count_threshold: int = 100, sample_s
     if len(image.shape) < 3 or image.shape[2] < 3:
         return None
     small = cv2.resize(image, (sample_size, sample_size), interpolation=cv2.INTER_AREA)
-    # Stage 1: White-background detection. Runs before the grayscale skip because
-    # some UI screens (e.g. template galleries) appear nearly grayscale but have
-    # distinctive white backgrounds that photos don't.
-    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-    white_pct = np.count_nonzero(gray > 240) / (sample_size * sample_size) * 100
-    if white_pct > 30.0:
-        return f"screenshot ({white_pct:.0f}% white background)"
-    # Skip effectively-grayscale 3-channel images (e.g. B&W photos from video).
-    # Same rationale as the single-channel skip above: can't reliably distinguish
-    # a B&W photo from a B&W screenshot using color diversity alone.
+    # Compute color diversity early: mean per-pixel channel difference. Used by both
+    # stage 1 (as a second signal alongside white-bg) and the grayscale skip.
     channels = small.astype(np.int16)
     mean_channel_diff = (
         np.abs(channels[:, :, 0] - channels[:, :, 1]).mean()
         + np.abs(channels[:, :, 0] - channels[:, :, 2]).mean()
         + np.abs(channels[:, :, 1] - channels[:, :, 2]).mean()
     ) / 3
+    # Stage 1: White-background detection. Requires BOTH a high percentage of bright
+    # pixels AND low color diversity to reject. UI screens (template galleries, web
+    # pages) are 40-70% white and nearly monochrome (ch_diff 6-9). Real photos with
+    # bright skies (e.g. backlit sunsets) can reach 30-35% white but have rich color
+    # gradients (ch_diff 15+), so the dual requirement avoids false positives.
+    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    white_pct = np.count_nonzero(gray > 240) / (sample_size * sample_size) * 100
+    if white_pct > 40.0 and mean_channel_diff < 15.0:
+        return f"screenshot ({white_pct:.0f}% white background)"
+    # Skip effectively-grayscale 3-channel images (e.g. B&W photos from video).
+    # Same rationale as the single-channel skip above: can't reliably distinguish
+    # a B&W photo from a B&W screenshot using color diversity alone.
     if mean_channel_diff < 10.0:
         return None
     # Stage 2: Color-count detection for simple flat-color screenshots.

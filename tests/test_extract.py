@@ -249,10 +249,24 @@ class TestIsScreenshot:
         # Add colored UI elements
         img[0:30, :] = [40, 40, 50]  # dark nav bar
         img[350:370, 100:300] = [0, 100, 200]  # blue button
-        # This has many unique colors from the thumbnails but >30% white background
+        # This has many unique colors from the thumbnails but >40% white background
         result = _is_screenshot(img)
         assert result is not None
         assert "white background" in result
+
+    def test_bright_sky_photo_not_rejected(self):
+        """A photo with bright sky (high white%) but rich color diversity should pass."""
+        rng = np.random.RandomState(42)
+        img = np.zeros((400, 400, 3), dtype=np.uint8)
+        # Upper half: bright sky gradient (lots of near-white pixels)
+        for row in range(200):
+            brightness = 240 + int(15 * row / 200)  # 240-255 gradient
+            img[row, :] = [brightness, brightness - 10, brightness - 30]  # warm sky tint
+        # Lower half: colorful ground (grass, people, etc.)
+        img[200:400, :] = rng.randint(20, 180, (200, 400, 3), dtype=np.uint8)
+        # ~50% of pixels are near-white (the sky), but high color diversity from the sky
+        # tint and ground content — should NOT be rejected as screenshot
+        assert _is_screenshot(img) is None
 
     def test_complex_ui_with_near_grayscale_rejected(self):
         """A near-grayscale UI screen with white background should be caught."""

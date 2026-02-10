@@ -5,10 +5,11 @@ Test video: serr-scenes_from_germany-[FhsTgnefjMU].mkv
 03:48
 03:56
 04:04
-04:15
-04:17
-04:21
-04:23
-04:26
-04:29
-04:32
+04:15 - Two people walking
+04:17 - A guy standing on a roof
+04:21 - A girl sitting on grass
+04:23 - A guy sitting on grass holding a camera. slanty horizon.
+04:26 - A guy sitting on grass wearing a baseball cap. trees in background.
+04:29 - View across a park. buildings in background.
+04:32 - Two men standing on top a hill.
+04:35 - Different to 04:32.
