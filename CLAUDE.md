@@ -102,10 +102,14 @@ Key modules in `extract_photos/`:
 - **transcode_playback.py** - Thin CLI wrapper for `transcode_for_playback()`. Called by `bin/epm` to copy/transcode the
   video with progress display.
 - **borders.py** - `trim_and_add_border()`: scans inward from each edge to find content boundaries using per-row/column
-  std deviation, crops original borders, detects text/watermarks near edges via `_detect_text_padding()` (looks for
-  sparse-content → zero-density-gap → dense-content pattern in column/row density profiles). Behavior depends on
-  `include_text`: when `False` (default), crops the text region out entirely and adds uniform `border_px` padding on all
-  sides; when `True`, adds extra padding on edges with text (matching the gap width), default 5px on clean edges.
+  std deviation, then cross-validates each boundary using perpendicular content strips — if rows/cols just past the
+  boundary differ in mean from the reference border color (sampled from image corners), the boundary expands outward.
+  This prevents dark photo content (low std but different mean from border) from being misclassified as border.
+  Validation only activates when perpendicular borders exist (>10px), so pillarbox/letterbox layouts are unaffected.
+  After trimming, detects text/watermarks near edges via `_detect_text_padding()` (looks for sparse-content →
+  zero-density-gap → dense-content pattern in column/row density profiles). Behavior depends on `include_text`: when
+  `False` (default), crops the text region out entirely and adds uniform `border_px` padding on all sides; when `True`,
+  adds extra padding on edges with text (matching the gap width), default 5px on clean edges.
 - **utils.py** - Photo validation, safe folder names, logging.
 - **display_progress.py** - `format_time()`, `build_progress_bar()`, and `print_scan_progress()` for 3-line in-place
   terminal progress.
@@ -125,11 +129,12 @@ Key modules in `extract_photos/`:
   ensure NFS persistence, followed by verification (existence + non-zero size). Includes a small delay between copies
   to avoid overwhelming NFS. Reports per-file failures and exits non-zero if any copies fail.
 
-**test-videos/** - Contains test video directories (`test-video-1/`, `test-video-2/`, `test-video-3/`), each with a test
-video and ground-truth timestamp files: `photo-timestamps.txt` (expected photos) and optionally `edge-cases.txt`
-(side-by-side photos and similar sequential photos). `test-video-1` has white-bordered photos (all-4-borders uniform),
-`test-video-2` has black pillarbox-bordered photos, `test-video-3` has white pillarbox-bordered photos. Integration
-tests auto-discover all `test-video-*` directories and run parametrized across them.
+**test-videos/** - Contains test video directories (`test-video-1/` through `test-video-5/`), each with a test video and
+ground-truth timestamp files: `photo-timestamps.txt` (expected photos) and optionally `edge-cases.txt` (side-by-side
+photos and similar sequential photos). `test-video-1` has white-bordered photos (all-4-borders uniform), `test-video-2`
+has black pillarbox-bordered photos, `test-video-3` has white pillarbox-bordered photos, `test-video-4` has
+`require_borders=false` photos, `test-video-5` has dark photo content near black borders (validates cross-validated
+border expansion). Integration tests auto-discover all `test-video-*` directories and run parametrized across them.
 
 **bin/epm** - Bash wrapper that SSHes into a remote host to run the tool on a single video. Accepts `host=NAME` to select
 the target: `immich_lxc` (default, SSH host `immich`) or `media_vm` (SSH host `media`). Auto-installs repo/deps on first

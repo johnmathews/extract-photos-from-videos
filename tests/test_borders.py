@@ -127,6 +127,79 @@ def _make_bordered_image_with_text(content_h, content_w, border_size, border_col
     return img
 
 
+class TestDarkContentBorder:
+    def test_dark_content_against_dark_border_not_overcropped(self):
+        """Dark photo content near black borders should not be misclassified as border."""
+        content_h, content_w = 400, 600
+        border_size = 50
+        h = content_h + 2 * border_size
+        w = content_w + 2 * border_size
+        img = np.zeros((h, w, 3), dtype=np.uint8)
+
+        # Top 300 rows: bright content (gradient, std >> 10), clearly detected by std scan
+        for c in range(3):
+            img[border_size : border_size + 300, border_size : border_size + content_w, c] = np.tile(
+                np.arange(content_w, dtype=np.uint8) % 200 + 50, (300, 1)
+            )
+
+        # Bottom 100 rows: very dark content (mean ~10, std ~5)
+        # This is the problematic region — std < uniformity_threshold but NOT border
+        rng = np.random.RandomState(42)
+        dark_rows = rng.normal(loc=10, scale=5, size=(100, content_w)).clip(1, 25).astype(np.uint8)
+        for c in range(3):
+            img[border_size + 300 : border_size + content_h, border_size : border_size + content_w, c] = dark_rows
+
+        result = trim_and_add_border(img, border_px=5)
+
+        # Without the fix: dark bottom rows are cropped, result height ≈ 300 + 2*5 = 310
+        # With the fix: dark rows are preserved, result height ≈ 400 + 2*5 = 410
+        assert result.shape[0] >= 390 + 2 * 5, (
+            f"Dark content was over-cropped: result height {result.shape[0]}, "
+            f"expected >= {390 + 2 * 5} (content ~400 + 2*5 border)"
+        )
+        assert result.shape[1] >= content_w - 5 + 2 * 5
+
+    def test_dark_content_all_sides(self):
+        """Dark content near all 4 borders should be preserved."""
+        content_h, content_w = 400, 600
+        border_size = 50
+        dark_band = 80  # dark content band on each edge
+        h = content_h + 2 * border_size
+        w = content_w + 2 * border_size
+        img = np.zeros((h, w, 3), dtype=np.uint8)
+
+        # Fill entire content area with bright gradient
+        for c in range(3):
+            img[border_size : border_size + content_h, border_size : border_size + content_w, c] = np.tile(
+                np.arange(content_w, dtype=np.uint8) % 200 + 50, (content_h, 1)
+            )
+
+        # Overwrite edges of content with dark pixels (mean ~12)
+        rng = np.random.RandomState(99)
+        # Top dark band
+        img[border_size : border_size + dark_band, border_size : border_size + content_w] = (
+            rng.normal(loc=12, scale=4, size=(dark_band, content_w, 3)).clip(2, 25).astype(np.uint8)
+        )
+        # Bottom dark band
+        img[border_size + content_h - dark_band : border_size + content_h, border_size : border_size + content_w] = (
+            rng.normal(loc=12, scale=4, size=(dark_band, content_w, 3)).clip(2, 25).astype(np.uint8)
+        )
+        # Left dark band
+        img[border_size : border_size + content_h, border_size : border_size + dark_band] = (
+            rng.normal(loc=12, scale=4, size=(content_h, dark_band, 3)).clip(2, 25).astype(np.uint8)
+        )
+        # Right dark band
+        img[border_size : border_size + content_h, border_size + content_w - dark_band : border_size + content_w] = (
+            rng.normal(loc=12, scale=4, size=(content_h, dark_band, 3)).clip(2, 25).astype(np.uint8)
+        )
+
+        result = trim_and_add_border(img, border_px=5)
+
+        # Most of the content should be preserved (allowing some tolerance for edge effects)
+        assert result.shape[0] >= content_h - 10 + 2 * 5
+        assert result.shape[1] >= content_w - 10 + 2 * 5
+
+
 class TestTextPadding:
     def test_text_on_right_gets_extra_padding(self):
         img = _make_bordered_image_with_text(

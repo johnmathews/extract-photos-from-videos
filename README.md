@@ -50,7 +50,8 @@ real photo has std > 15. Checked during both scanning (Phase 2) and full-res ext
    - It is sufficiently different from the previous extracted photo (perceptual hash deduplication).
    - The bordered content covers at least 25% of the video frame area (tunable via `--min-photo-pct`).
    - It is not a screenshot (has enough color diversity to be a real photo).
-4. Borders are trimmed and replaced with a clean border matching the original color. If text/annotations are
+4. Borders are trimmed and replaced with a clean border matching the original color. Cross-validation against
+   perpendicular edges prevents dark photo content from being misclassified as border. If text/annotations are
    detected next to the photo, they are cropped out by default; use `--include-text` to keep them.
 5. Output is organized into per-video subdirectories.
 

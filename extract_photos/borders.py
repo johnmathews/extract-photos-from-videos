@@ -131,6 +131,89 @@ def trim_and_add_border(image: np.ndarray, border_px: int = 5, uniformity_thresh
             right = j
             break
 
+    # --- Cross-validated border expansion ---
+    # The std-based scan misclassifies dark photo content (low std) as border.
+    # Validate each edge using the perpendicular content strip: if rows/cols just
+    # past the boundary differ in mean from actual border color, expand outward.
+    border_mean_tolerance = 5
+    min_border_for_validation = 10
+    check_size = 20
+
+    # Estimate border color from image corners (always within border region)
+    cs = 3
+    border_ref = float(np.mean([
+        np.mean(gray[:cs, :cs]),  # type: ignore[reportArgumentType]
+        np.mean(gray[:cs, w - cs :]),  # type: ignore[reportArgumentType]
+        np.mean(gray[h - cs :, :cs]),  # type: ignore[reportArgumentType]
+        np.mean(gray[h - cs :, w - cs :]),  # type: ignore[reportArgumentType]
+    ]))  # type: ignore[reportArgumentType]
+
+    left_bw = left
+    right_bw = w - 1 - right
+
+    # Phase 1: Validate top/bottom using left/right content strip
+    if left_bw > min_border_for_validation and right_bw > min_border_for_validation:
+        # Validate bottom boundary
+        cb_start = bottom + 1
+        cb_end = min(bottom + 1 + check_size, h)
+        if cb_start < cb_end:
+            strip_mean = float(np.mean(gray[cb_start:cb_end, left : right + 1]))  # type: ignore[reportArgumentType]
+            if abs(strip_mean - border_ref) > border_mean_tolerance:
+                for i in range(bottom + 1, h):
+                    row_mean = float(np.mean(gray[i, left : right + 1]))  # type: ignore[reportArgumentType]
+                    if abs(row_mean - border_ref) <= border_mean_tolerance:
+                        bottom = i - 1
+                        break
+                else:
+                    bottom = h - 1
+
+        # Validate top boundary
+        ct_start = max(top - check_size, 0)
+        ct_end = top
+        if ct_start < ct_end:
+            strip_mean = float(np.mean(gray[ct_start:ct_end, left : right + 1]))  # type: ignore[reportArgumentType]
+            if abs(strip_mean - border_ref) > border_mean_tolerance:
+                for i in range(top - 1, -1, -1):
+                    row_mean = float(np.mean(gray[i, left : right + 1]))  # type: ignore[reportArgumentType]
+                    if abs(row_mean - border_ref) <= border_mean_tolerance:
+                        top = i + 1
+                        break
+                else:
+                    top = 0
+
+    top_bw = top
+    bottom_bw = h - 1 - bottom
+
+    # Phase 2: Validate left/right using (possibly corrected) top/bottom content strip
+    if top_bw > min_border_for_validation and bottom_bw > min_border_for_validation:
+        # Validate right boundary
+        cr_start = right + 1
+        cr_end = min(right + 1 + check_size, w)
+        if cr_start < cr_end:
+            strip_mean = float(np.mean(gray[top : bottom + 1, cr_start:cr_end]))  # type: ignore[reportArgumentType]
+            if abs(strip_mean - border_ref) > border_mean_tolerance:
+                for j in range(right + 1, w):
+                    col_mean = float(np.mean(gray[top : bottom + 1, j]))  # type: ignore[reportArgumentType]
+                    if abs(col_mean - border_ref) <= border_mean_tolerance:
+                        right = j - 1
+                        break
+                else:
+                    right = w - 1
+
+        # Validate left boundary
+        cl_start = max(left - check_size, 0)
+        cl_end = left
+        if cl_start < cl_end:
+            strip_mean = float(np.mean(gray[top : bottom + 1, cl_start:cl_end]))  # type: ignore[reportArgumentType]
+            if abs(strip_mean - border_ref) > border_mean_tolerance:
+                for j in range(left - 1, -1, -1):
+                    col_mean = float(np.mean(gray[top : bottom + 1, j]))  # type: ignore[reportArgumentType]
+                    if abs(col_mean - border_ref) <= border_mean_tolerance:
+                        left = j + 1
+                        break
+                else:
+                    left = 0
+
     # Sample border color from the original border region (top-left corner)
     border_sample = image[: max(top, 1), : max(left, 1)]
 

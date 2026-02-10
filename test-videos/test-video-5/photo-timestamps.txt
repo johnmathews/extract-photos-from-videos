@@ -1,0 +1,9 @@
+Timestamps of photos with dark content near black borders (test for trim over-cropping).
+Test video: serr-scenes_from_germany-[FhsTgnefjMU].mkv
+
+03:30
+03:48
+03:56
+04:04
+04:21
+04:26
