@@ -64,8 +64,9 @@ Each video goes through three phases:
    photos using two thresholds: tight (`HASH_STEP_THRESHOLD` 3) for
    segments separated by a single non-static frame (codec keyframe artifacts that split one photo into two segments),
    and wider (`HASH_DIFF_THRESHOLD` 10) for segments separated by sustained non-static content. Hash state resets after
-   2+ consecutive non-static frames to avoid false dedup of genuinely different photos; a single non-static frame
-   (common at H.264 keyframe boundaries in long photos) preserves the hash so the same photo isn't extracted twice.
+   2+ consecutive non-static frames, or after a single non-static frame with MAD above `SCENE_CHANGE_MAD_THRESHOLD`
+   (5.0) — this distinguishes real scene changes (MAD 5+) from codec keyframe artifacts (MAD 0.5–2.0). A single
+   low-MAD non-static frame preserves the hash so the same photo isn't extracted twice.
    Collects timestamps of unique photos.
 3. **Extract** — Opens the original full-res video, seeks to each discovered timestamp, runs border trimming and
    validation (minimum area as % of frame, near-uniform, screenshot detection), saves as JPEG.

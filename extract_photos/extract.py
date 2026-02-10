@@ -23,6 +23,7 @@ HASH_DIFF_THRESHOLD = 10  # hamming distance out of 64 bits — for first-detect
 HASH_STEP_THRESHOLD = 3  # step-to-step threshold — same photo has distance 0-2
 STATIC_MAD_THRESHOLD = 0.5  # mean absolute pixel difference — frames below this are "identical"
 BORDERLESS_MAD_THRESHOLD = 0.25  # max avg MAD across a segment when require_borders=False
+SCENE_CHANGE_MAD_THRESHOLD = 5.0  # MAD above this in a single non-static frame = real scene change, not codec artifact
 
 VAAPI_DEVICE = "/dev/dri/renderD128"
 _vaapi_available: bool | None = None
@@ -529,7 +530,9 @@ def scan_for_photos(
             # static segment is treated as a fresh detection.  A single
             # non-static frame (codec keyframe artifact) preserves the hash
             # so back-to-back segments of the same photo are still deduped.
-            if nonstatic_run >= 2:
+            # Also reset on high-MAD single frames — these are real scene
+            # changes (MAD 5+), not codec artifacts (MAD 0.5–2.0).
+            if nonstatic_run >= 2 or mad > SCENE_CHANGE_MAD_THRESHOLD:
                 prev_photo_hash = None
 
         prev_gray = gray
