@@ -93,8 +93,10 @@ Key modules in `extract_photos/`:
   `extract_fullres_frames()` seeks to each timestamp in the original video. `_rejection_reason()` validates extracted
   frames: checks minimum area (as % of video frame area, default 25%, tunable via `--min-photo-pct`), rejects
   near-uniform frames via `_is_near_uniform()` (grayscale std dev < 5.0), and rejects screenshots via `_is_screenshot()`
-  (two-stage: first rejects images with >40% near-white pixels AND low color diversity (mean channel difference <15)
-  as UI screens — the dual requirement prevents false positives on backlit photos with bright skies;
+  (two-stage: first rejects images with ALL THREE of: >=10 near-horizontal/vertical straight lines detected by
+  `_count_hv_lines()` (Canny + HoughLinesP on 128x128 with 5% edge margin to exclude border artifacts), >30%
+  near-white pixels, AND low color diversity (mean channel difference <15) — the triple requirement prevents false
+  positives on high-key B&W photos (organic shapes, no straight lines) and backlit sky photos (high color diversity);
   then rejects images with <100 quantized colors at 128x128; skips effectively-grayscale images for the color-count
   stage using mean channel difference < 10). `get_video_metadata()` returns `(fps, duration_sec, width, height)`.
   `transcode_for_playback()` transcodes video to H.264/MP4 for Immich compatibility with a progress bar (or copies if
@@ -131,12 +133,14 @@ Key modules in `extract_photos/`:
   ensure NFS persistence, followed by verification (existence + non-zero size). Includes a small delay between copies
   to avoid overwhelming NFS. Reports per-file failures and exits non-zero if any copies fail.
 
-**test-videos/** - Contains test video directories (`test-video-1/` through `test-video-5/`), each with a test video and
+**test-videos/** - Contains test video directories (`test-video-1/` through `test-video-6/`), each with a test video and
 ground-truth timestamp files: `photo-timestamps.txt` (expected photos) and optionally `edge-cases.txt` (side-by-side
 photos and similar sequential photos). `test-video-1` has white-bordered photos (all-4-borders uniform), `test-video-2`
 has black pillarbox-bordered photos, `test-video-3` has white pillarbox-bordered photos, `test-video-4` has
 `require_borders=false` photos, `test-video-5` has dark photo content near black borders (validates cross-validated
-border expansion). Integration tests auto-discover all `test-video-*` directories and run parametrized across them.
+border expansion), `test-video-6` has high-key B&W photographs (validates screenshot detection doesn't false-positive
+on photos with lots of white). Integration tests auto-discover all `test-video-*` directories and run parametrized
+across them.
 
 **bin/epm** - Bash wrapper that SSHes into a remote host to run the tool on a single video. Accepts `host=NAME` to select
 the target: `immich_lxc` (default, SSH host `immich`) or `media_vm` (SSH host `media`). Auto-installs repo/deps on first
@@ -164,7 +168,7 @@ Logs are organized by video name with timestamps to preserve multiple runs:
 ```
 Remote host:
 ~/extract-photos/logs/
-  {video_name}/
+  {timestamp}_{video_name}/
     {timestamp}_console.log       # Console output (tmux pipe-pane)
 
 Output directory (NFS):

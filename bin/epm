@@ -65,7 +65,7 @@ copy_remote_log() {
     # Copy remote console log to local logs directory
     mkdir -p "$LOCAL_LOGS_DIR"
     local local_log="$LOCAL_LOGS_DIR/${RUN_TIMESTAMP}_${VIDEO_NAME_SAFE}.log"
-    local remote_log="~/extract-photos/logs/$VIDEO_NAME_SAFE/${RUN_TIMESTAMP}_console.log"
+    local remote_log="~/extract-photos/logs/$LOG_DIR_NAME/${RUN_TIMESTAMP}_console.log"
     scp -q "$SSH_HOST:$remote_log" "$local_log" 2>/dev/null || true
     if [ -f "$local_log" ]; then
         echo "Log saved to: $local_log"
@@ -200,6 +200,7 @@ fi
 VIDEO_BASENAME="$(basename "$VIDEO")"
 VIDEO_BASENAME="${VIDEO_BASENAME%.*}"
 VIDEO_NAME_SAFE=$(echo "$VIDEO_BASENAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd '[:alnum:]_-')
+LOG_DIR_NAME="${RUN_TIMESTAMP}_${VIDEO_NAME_SAFE}"
 
 # --- Banner ---
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -212,7 +213,7 @@ SESSION_NAME="epm-$(printf '%s' "$VIDEO" | shasum | cut -c1-8)"
 # --- Check for existing tmux session (reattach after disconnect) ---
 if ssh "$SSH_HOST" "tmux has-session -t $SESSION_NAME 2>/dev/null"; then
     echo "Reattaching to running extraction..."
-    ssh -tt "$SSH_HOST" "tmux attach-session -t $SESSION_NAME" </dev/tty
+    ssh -tt "$SSH_HOST" "tmux attach-session -t $SESSION_NAME" </dev/tty || true
     read_remote_result
     exit 0
 fi
@@ -444,7 +445,8 @@ else
 fi
 
 # Copy console log alongside the extraction output
-REMOTE_LOG_FILE="$HOME/extract-photos/logs/$VIDEO_NAME_SAFE/${RUN_TIMESTAMP}_console.log"
+LOG_DIR_NAME="${RUN_TIMESTAMP}_${VIDEO_NAME_SAFE}"
+REMOTE_LOG_FILE="$HOME/extract-photos/logs/$LOG_DIR_NAME/${RUN_TIMESTAMP}_console.log"
 if [ -f "$REMOTE_LOG_FILE" ] && [ -d "${FINAL_OUTPUT:-}" ]; then
     mkdir -p "$FINAL_OUTPUT/logs"
     cp "$REMOTE_LOG_FILE" "$FINAL_OUTPUT/logs/${RUN_TIMESTAMP}_console.log" 2>/dev/null || true
@@ -462,9 +464,9 @@ ssh "$SSH_HOST" "tmux new-session -d -s $SESSION_NAME \
     \"trap 'rm -f $REMOTE_SCRIPT' EXIT; bash -l $REMOTE_SCRIPT $(printf '%q ' "$VIDEO" "$OUTPUT" "$UPDATE_IMMICH" "$SESSION_NAME" "$RUN_TIMESTAMP" "$VIDEO_NAME_SAFE" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"); stty sane; echo; echo 'Press Enter to close.'; read\""
 
 # Capture all console output to a log file on the remote host
-ssh "$SSH_HOST" "mkdir -p ~/extract-photos/logs/$VIDEO_NAME_SAFE && tmux pipe-pane -t $SESSION_NAME 'cat >> ~/extract-photos/logs/$VIDEO_NAME_SAFE/${RUN_TIMESTAMP}_console.log'"
+ssh "$SSH_HOST" "mkdir -p ~/extract-photos/logs/$LOG_DIR_NAME && tmux pipe-pane -t $SESSION_NAME 'cat >> ~/extract-photos/logs/$LOG_DIR_NAME/${RUN_TIMESTAMP}_console.log'"
 
-ssh -tt "$SSH_HOST" "tmux attach-session -t $SESSION_NAME" </dev/tty
+ssh -tt "$SSH_HOST" "tmux attach-session -t $SESSION_NAME" </dev/tty || true
 
 read_remote_result
 echo "Done."

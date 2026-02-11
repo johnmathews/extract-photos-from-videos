@@ -1,11 +1,13 @@
 from unittest.mock import patch
 import subprocess
 
+import cv2
 import numpy as np
 
 import extract_photos.extract as extract_mod
 from extract_photos.extract import (
     VAAPI_DEVICE,
+    _count_hv_lines,
     _is_near_uniform,
     _is_screenshot,
     _is_vaapi_available,
@@ -238,21 +240,27 @@ class TestIsScreenshot:
         assert _is_screenshot(img) is not None
 
     def test_complex_ui_with_white_background_rejected(self):
-        """A UI screen with many colors (thumbnails, gradients) but white background."""
-        rng = np.random.RandomState(42)
+        """A UI screen with grid layout, nav bars, and buttons — produces straight lines."""
         # Start with mostly white background
         img = np.full((400, 400, 3), 250, dtype=np.uint8)
-        # Add photo thumbnails (high color diversity)
-        img[50:150, 50:150] = rng.randint(0, 256, (100, 100, 3), dtype=np.uint8)
-        img[50:150, 200:300] = rng.randint(0, 256, (100, 100, 3), dtype=np.uint8)
-        img[200:300, 50:150] = rng.randint(0, 256, (100, 100, 3), dtype=np.uint8)
-        # Add colored UI elements
-        img[0:30, :] = [40, 40, 50]  # dark nav bar
-        img[350:370, 100:300] = [0, 100, 200]  # blue button
-        # This has many unique colors from the thumbnails but >40% white background
+        # Nav bar across top (strong horizontal edge)
+        img[0:30, :] = [40, 40, 50]
+        # Sidebar (strong vertical edge)
+        img[30:400, 0:60] = [45, 45, 55]
+        # Grid of dark rectangular cards (multiple H/V edges)
+        for row_start in [50, 150, 250]:
+            for col_start in [80, 200, 320]:
+                img[row_start:row_start + 80, col_start:col_start + 60] = [60, 60, 70]
+        # Horizontal divider lines
+        img[140:142, 60:400] = [30, 30, 40]
+        img[240:242, 60:400] = [30, 30, 40]
+        img[340:342, 60:400] = [30, 30, 40]
+        # Button bar at bottom
+        img[370:390, 100:300] = [50, 50, 60]
+        # This has low color diversity (near-gray UI) + lots of white + many straight lines
         result = _is_screenshot(img)
         assert result is not None
-        assert "white background" in result
+        assert "straight lines" in result
 
     def test_bright_sky_photo_not_rejected(self):
         """A photo with bright sky (high white%) but rich color diversity should pass."""
@@ -268,17 +276,43 @@ class TestIsScreenshot:
         # tint and ground content — should NOT be rejected as screenshot
         assert _is_screenshot(img) is None
 
+    def test_high_key_bw_photo_not_rejected(self):
+        """A high-key B&W photo (lots of white, organic content) should not be rejected."""
+        rng = np.random.RandomState(42)
+        # Start mostly white (high-key exposure)
+        img = np.full((400, 400), 245, dtype=np.uint8)
+        # Add organic shapes — smooth gradients and blobs, no straight lines
+        for _ in range(20):
+            cx, cy = rng.randint(50, 350, 2)
+            radius = rng.randint(15, 60)
+            brightness = rng.randint(30, 200)
+            cv2.circle(img, (int(cx), int(cy)), int(radius), int(brightness), -1)
+        # Gaussian blur to make edges organic (no sharp straight lines)
+        img = cv2.GaussianBlur(img, (15, 15), 5)
+        # Convert to 3-channel B&W (as it would come from video)
+        img_bgr = np.stack([img, img, img], axis=2)
+        assert _is_screenshot(img_bgr) is None
+
     def test_complex_ui_with_near_grayscale_rejected(self):
-        """A near-grayscale UI screen with white background should be caught."""
-        # Mostly white with gray text/UI elements (mean_channel_diff < 10)
+        """A near-grayscale UI screen with white background and strong edges should be caught."""
+        # Mostly white with gray UI elements (mean_channel_diff < 10)
         img = np.full((400, 400, 3), 248, dtype=np.uint8)
-        # Gray text and UI elements
-        img[20:25, 50:200] = [80, 80, 82]  # nav text
-        img[100:250, 30:370] = [220, 222, 220]  # content panel
-        img[300:350, 50:350] = [200, 200, 202]  # footer
+        # Dark nav bar (strong horizontal edge)
+        img[0:30, :] = [80, 80, 82]
+        # Sidebar (strong vertical edge)
+        img[30:400, 0:50] = [90, 90, 92]
+        # Content cards (rectangular, lots of H/V edges)
+        for row_start in [50, 150, 250]:
+            for col_start in [70, 200, 330]:
+                img[row_start:row_start + 80, col_start:col_start + 50] = [100, 100, 102]
+        # Horizontal dividers
+        img[140:142, 50:400] = [60, 60, 62]
+        img[240:242, 50:400] = [60, 60, 62]
+        # Footer
+        img[360:390, :] = [85, 85, 87]
         result = _is_screenshot(img)
         assert result is not None
-        assert "white background" in result
+        assert "straight lines" in result
 
 
 class TestWhiteBackgroundPercentage:

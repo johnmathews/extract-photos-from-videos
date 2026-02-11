@@ -213,16 +213,54 @@ def _white_background_percentage(image: np.ndarray, sample_size: int = 128, brig
     return white_pixels / (sample_size * sample_size) * 100
 
 
-def _is_screenshot(image: np.ndarray, color_count_threshold: int = 100, sample_size: int = 128) -> str | None:
+def _count_hv_lines(gray: np.ndarray, angle_tolerance: float = 5.0, margin_pct: float = 5.0) -> int:
+    """Count near-horizontal and near-vertical straight lines in a grayscale image.
+
+    Uses Canny edge detection followed by probabilistic Hough transform.
+    Returns the number of lines within angle_tolerance degrees of horizontal
+    or vertical. Screenshots have UI chrome (buttons, tables, nav bars) producing
+    15-50+ such lines; photos have organic shapes producing 0-8.
+
+    Crops margin_pct% from each edge before detection to avoid counting
+    the border edges added by trim_and_add_border().
+    """
+    h, w = gray.shape[:2]
+    margin_y = max(1, int(h * margin_pct / 100))
+    margin_x = max(1, int(w * margin_pct / 100))
+    cropped = gray[margin_y:h - margin_y, margin_x:w - margin_x]
+    edges = cv2.Canny(cropped, 50, 150)
+    lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=30, minLineLength=20, maxLineGap=5)
+    if lines is None:
+        return 0
+    count = 0
+    for line in lines:
+        x1, y1, x2, y2 = line[0]  # type: ignore[reportIndexIssue]
+        dx = abs(x2 - x1)
+        dy = abs(y2 - y1)
+        if dx == 0 and dy == 0:
+            continue
+        # Near-vertical: dx/dy < tan(tolerance)
+        if dy > 0 and dx / dy < np.tan(np.radians(angle_tolerance)):
+            count += 1
+        # Near-horizontal: dy/dx < tan(tolerance)
+        elif dx > 0 and dy / dx < np.tan(np.radians(angle_tolerance)):
+            count += 1
+    return count
+
+
+def _is_screenshot(
+    image: np.ndarray, color_count_threshold: int = 100, sample_size: int = 128,
+    line_count_threshold: int = 10, white_pct_threshold: float = 30.0, color_var_threshold: float = 15.0,
+) -> str | None:
     """Return a rejection reason if the image looks like a screenshot/UI, else None.
 
     Two-stage detection:
-    1. White-background check: rejects images with >40% near-white pixels (>240
-       brightness at 128x128) AND low color diversity (mean channel difference <15).
-       UI screens have large white backgrounds (40-70%) and are nearly monochrome
-       (ch_diff 6-9); real photos with bright skies have higher color diversity
-       (ch_diff 15+). Requiring both signals prevents false positives on backlit
-       sunset/sky photos.
+    1. White-background + straight-line check: rejects images that have ALL THREE of:
+       (a) parallel straight lines >= line_count_threshold (UI chrome, buttons, tables),
+       (b) near-white pixels > white_pct_threshold%, and
+       (c) low color diversity (mean channel difference < color_var_threshold).
+       Photos have organic shapes (0-8 straight lines) so the line requirement
+       prevents false positives on high-key B&W photos and backlit sky photos.
     2. Color-count check: downscales to sample_size x sample_size, quantizes colors
        to 32 levels per channel, and counts unique combinations. Simple screenshots
        with flat UI regions have 4-30 unique colors; photos have 100+.
@@ -239,15 +277,16 @@ def _is_screenshot(image: np.ndarray, color_count_threshold: int = 100, sample_s
         + np.abs(channels[:, :, 0] - channels[:, :, 2]).mean()
         + np.abs(channels[:, :, 1] - channels[:, :, 2]).mean()
     ) / 3
-    # Stage 1: White-background detection. Requires BOTH a high percentage of bright
-    # pixels AND low color diversity to reject. UI screens (template galleries, web
-    # pages) are 40-70% white and nearly monochrome (ch_diff 6-9). Real photos with
-    # bright skies (e.g. backlit sunsets) can reach 30-35% white but have rich color
-    # gradients (ch_diff 15+), so the dual requirement avoids false positives.
+    # Stage 1: White-background + UI-line detection. Requires ALL THREE signals:
+    # high white %, low color diversity, AND straight H/V lines (UI chrome).
+    # High-key B&W photos have lots of white and low color diversity but no
+    # straight lines; backlit sky photos have high white but rich color gradients.
     gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
     white_pct = np.count_nonzero(gray > 240) / (sample_size * sample_size) * 100
-    if white_pct > 40.0 and mean_channel_diff < 15.0:
-        return f"screenshot ({white_pct:.0f}% white background)"
+    if white_pct > white_pct_threshold and mean_channel_diff < color_var_threshold:
+        hv_lines = _count_hv_lines(gray)
+        if hv_lines >= line_count_threshold:
+            return f"screenshot ({hv_lines} straight lines, {white_pct:.0f}% white, ch_diff {mean_channel_diff:.1f})"
     # Skip effectively-grayscale 3-channel images (e.g. B&W photos from video).
     # Same rationale as the single-channel skip above: can't reliably distinguish
     # a B&W photo from a B&W screenshot using color diversity alone.
