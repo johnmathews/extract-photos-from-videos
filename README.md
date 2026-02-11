@@ -25,9 +25,10 @@ side-by-side photos and visually similar sequential photos are covered by integr
 
 ### 3. ~~Screenshots are not photos~~ (fixed)
 
-Screenshots and UI screens from ad segments are now detected by counting unique quantized colors. The image is downscaled
-to 128x128 and quantized to 32 levels per channel. Screenshots have flat UI regions with very few unique colors (4-30),
-while real photos have natural color diversity (100+). Checked during full-res extraction (Phase 3).
+Screenshots and UI screens from ad segments are now detected with a two-stage approach. Stage 1 requires all three of:
+many straight H/V lines (UI chrome), high white-pixel percentage, and low color diversity — this catches white-background
+UI while avoiding false positives on high-key B&W photographs and backlit sky photos. Stage 2 counts unique quantized
+colors to catch flat-color UI blocks. See [Screenshot detection](#screenshot-detection) for details.
 
 ### 4. ~~Black screens or white screens are not photos~~ (fixed)
 
@@ -49,13 +50,52 @@ real photo has std > 15. Checked during both scanning (Phase 2) and full-res ext
    - It is not near-uniform (solid black/white or near-solid with codec noise).
    - It is sufficiently different from the previous extracted photo (perceptual hash deduplication).
    - The bordered content covers at least 25% of the video frame area (tunable via `--min-photo-pct`).
-   - It is not a screenshot (has enough color diversity to be a real photo).
+   - It is not a screenshot (see [Screenshot detection](#screenshot-detection)).
 4. Borders are trimmed and replaced with a clean border matching the original color. Cross-validation against
    perpendicular edges prevents dark photo content from being misclassified as border. If text/annotations are
    detected next to the photo, they are cropped out by default; use `--include-text` to keep them.
 5. Output is organized into per-video subdirectories.
 
 Supported video formats: `.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`.
+
+## Screenshot detection
+
+Screenshots and UI screens (ad segments, template galleries, web pages) are rejected during Phase 3 (full-res
+extraction) via `_is_screenshot()`. Detection uses two independent stages — a frame is rejected if **either** stage
+triggers.
+
+### Stage 1: White-background UI detection
+
+Rejects images that satisfy **all three** conditions simultaneously:
+
+| Signal | Threshold | What it measures |
+| --- | --- | --- |
+| Straight lines | `line_count_threshold = 10` | Near-horizontal/vertical lines detected by Canny edge detection + HoughLinesP on 128x128 grayscale. UI chrome (nav bars, buttons, table rows, card edges) produces 15-50+ lines; photos have organic shapes producing 0-8. |
+| White pixels | `white_pct_threshold = 30.0%` | Percentage of pixels with brightness > 240 at 128x128. UI screens are typically 40-70% white; most photos are below 10%. |
+| Color diversity | `color_var_threshold = 15.0` | Mean per-pixel channel difference across B-G, B-R, and G-R pairs. Near-grayscale UI has ch_diff 6-9; colour photos have ch_diff 15+. |
+
+The triple requirement prevents false positives on:
+- **High-key B&W photographs** — lots of white pixels and low color diversity, but organic shapes (0-8 straight lines)
+- **Backlit sky/sunset photos** — high white-pixel percentage, but rich color gradients (ch_diff 15+)
+
+**Line detection details** (`_count_hv_lines()`): Canny edges are computed on 128x128 grayscale with thresholds 50/150.
+A 5% margin is cropped from each edge before detection to exclude the uniform border added by `trim_and_add_border()`.
+HoughLinesP parameters: `threshold=30`, `minLineLength=20`, `maxLineGap=5`. Lines within 5 degrees of horizontal or
+vertical are counted.
+
+### Stage 2: Flat-color UI detection
+
+Catches simple screenshots with large flat-colored blocks (solid buttons, panels, backgrounds) that may not have enough
+white to trigger Stage 1.
+
+| Parameter | Value | Description |
+| --- | --- | --- |
+| `color_count_threshold` | `100` | Minimum unique colors at 128x128 after quantization to 32 levels/channel |
+| `sample_size` | `128` | Downscale resolution for analysis |
+
+Simple screenshots have 4-30 unique quantized colors; real photos have 100+. This stage is skipped for
+effectively-grayscale images (mean channel difference < 10) since B&W photos can't be reliably distinguished from
+B&W screenshots using color count alone.
 
 ## Setup
 
@@ -90,7 +130,12 @@ uv run python -m extract_photos.main INPUT_DIR [options]
 | `-s, --step_time`           | `0.5`              | Seconds between sampled frames                       |
 | `-b, --border_px`           | `5`                | Border size in pixels to add around extracted photos |
 | `--min-photo-pct`           | `25`               | Minimum photo area as % of video frame area          |
-| `--include-text` / `--no-include-text` | `no`    | Include text/annotations next to photos; use `--include-text` to keep them |
+| `--min-photo-duration`      | `0.5`              | Minimum seconds a photo must persist on screen       |
+| `--include-text` / `--no-include-text` | `no`    | Include text/annotations next to photos              |
+| `--detect-all-borders` / `--no-detect-all-borders` | `yes` | Enable all-4-borders detection pattern     |
+| `--detect-pillarbox` / `--no-detect-pillarbox` | `yes` | Enable pillarbox (left+right) border detection |
+| `--detect-letterbox` / `--no-detect-letterbox` | `yes` | Enable letterbox (top+bottom) border detection |
+| `--require-borders` / `--no-require-borders` | `yes` | Require uniform borders to detect photos. Set `--no-require-borders` for full-frame photos without borders |
 
 ### Examples
 
@@ -135,8 +180,11 @@ second. A single log file per video records detailed extraction decisions.
 ## Testing
 
 ```bash
-# Run all Python tests
+# Run fast unit tests
 uv run pytest tests/
+
+# Run slow integration tests (requires test videos in test-videos/test-video-*/)
+uv run pytest tests/test_video_integration.py -m slow
 
 # Run with verbose output
 uv run pytest tests/ -v
@@ -145,8 +193,9 @@ uv run pytest tests/ -v
 bash tests/test_epm.sh
 ```
 
-The Python tests use synthetic numpy arrays for image-processing logic and mocked HTTP responses for the Immich
-integration.
+The unit tests use synthetic numpy arrays for image-processing logic and mocked HTTP responses for the Immich
+integration. Integration tests run the full pipeline against real test videos and verify expected timestamps are
+found.
 
 **Test files:**
 
@@ -157,11 +206,8 @@ integration.
 | `test_borders.py`         | `borders.py`      | Border trimming and re-addition                                    |
 | `test_display_progress.py`| `display_progress.py` | Time formatting, progress bar rendering                        |
 | `test_immich.py`          | `immich.py`       | HTTP wrapper, polling, album CRUD, asset ordering, date handling, sharing, push notifications, CLI orchestration |
+| `test_video_integration.py` | `extract.py`    | End-to-end: transcode, scan, extract against real test videos (slow, parametrized across test-video-1 through test-video-6) |
 | `test_epm.sh`             | `bin/epm`         | Argument parsing, required/optional args, error messages (shell)   |
-
-The untested code (`transcode_lowres`, `scan_for_photos`, `extract_fullres_frames`, `extract_photos_from_video`,
-`batch_processor`, `main`) is orchestration that calls ffmpeg/ffprobe and does file I/O. Testing it would require real
-video fixtures and mostly validate that OpenCV and ffmpeg work, not project logic.
 
 ## Remote extraction (`epm`)
 
@@ -203,9 +249,15 @@ epm input_file=VIDEO [output_dir=DIR] [options]
 
 | Option              | Default | Description                                              |
 | ------------------- | ------- | -------------------------------------------------------- |
+| `host=NAME`         | `immich_lxc` | Remote host: `immich_lxc` (SSH host `immich`) or `media_vm` (SSH host `media`) |
 | `step_time=SECONDS` | `0.5`   | Seconds between sampled frames                           |
 | `border_px=INT`     | `5`     | Border size in pixels to add around extracted photos     |
 | `min_photo_pct=INT` | `25`    | Minimum photo area as % of video frame area              |
+| `min_photo_duration=FLOAT` | `0.5` | Minimum seconds a photo must persist on screen      |
+| `detect_all_borders=BOOL` | `true` | Enable all-4-borders detection pattern              |
+| `detect_pillarbox=BOOL` | `true` | Enable pillarbox (left+right) border detection        |
+| `detect_letterbox=BOOL` | `true` | Enable letterbox (top+bottom) border detection        |
+| `require_borders=BOOL` | `true` | Require uniform borders to detect photos. Set to `false` for full-frame photos |
 | `include_text=BOOL` | `false` | Include text/annotations next to photos                  |
 | `update_immich=BOOL`| `true`  | Run Immich integration (rescan, album creation, sharing) |
 | `help`              |         | Show usage                                               |
@@ -261,10 +313,11 @@ If any required variables are unset, the reason is shown in the output. To disab
 | Location | Content | Lifetime |
 | --- | --- | --- |
 | `logs/{timestamp}_{video}.log` (local, in repo) | Full console output copied from remote after each run | Permanent |
-| `~/extract-photos/logs/{session}.log` (remote) | Full console output captured via tmux `pipe-pane` | 30-day auto-cleanup |
-| `{output}/logs/{timestamp}.txt` (remote) | Copy of console output alongside extracted photos | Permanent |
+| `~/extract-photos/logs/{timestamp}_{video}/` (remote) | Console output captured via tmux `pipe-pane` | 30-day auto-cleanup |
+| `{output}/{video}/logs/{timestamp}_console.log` (remote) | Copy of console output alongside extracted photos | Permanent |
 
-Local log files are named like `2026-02-04_143000_sunset.log` (timestamp + sanitized video name).
+Local log files are named like `2026-02-04_143000_sunset.log` (timestamp + sanitized video name). Remote log
+directories use timestamped prefixes (`2026-02-04_143000_sunset/`) so each run gets its own directory.
 
 ## Architecture Documentation
 
